@@ -28,7 +28,7 @@ jobs:
           gh run download "$SOURCE_RUN" --name consta-android-internal-9 --dir release
           (cd release && sha256sum -c SHA256SUMS.txt)
           sdk_dir="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
-          apk_signer="$(rg --files "$sdk_dir/build-tools" -g apksigner | sort -V | tail -n 1)"
+          apk_signer="$(find "$sdk_dir/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -n "$apk_signer"
           "$apk_signer" verify --verbose --print-certs release/consta-internal.apk > release/apk-verification.txt
           "$(dirname "$apk_signer")/aapt" dump badging release/consta-internal.apk > release/apk-package.txt

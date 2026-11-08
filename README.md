@@ -2,6 +2,14 @@
 
 Aplicativo **nativo** de treinos e desafios privados entre amigos, em português do Brasil. Android é a plataforma prioritária; a base React Native/TypeScript também suporta iOS. Não há versão web substituindo sensores nativos.
 
+## Download Android
+
+[Baixar APK para teste interno](https://github.com/1kygg/Apk/releases/download/consta-android-893bed7/consta-internal.apk) · [checksum, certificado e verificação](https://github.com/1kygg/Apk/releases/tag/consta-android-893bed7).
+
+Android 8.0 ou superior, arm64, assinatura de desenvolvimento. Abra o APK no celular para instalar. O build foi compilado e sua assinatura/pacote foram conferidos; instalação em aparelho ainda não foi verificada. Sem backend HTTPS e OAuth configurados, a entrada informa configuração pendente. Consulte as instruções abaixo antes de uso conectado.
+
+Código do APK: `893bed757c766e99182f25b1edb316fc4f460285`. [Build e 138 testes aprovados](https://github.com/1kygg/Apk/actions/runs/42487145111).
+
 ## Código
 
 - `apps/mobile`: Expo SDK 54, cinco abas, Google Sign-In nativo, Apple Sign-In no iOS, SQLite, SecureStore, localização, pedômetro opcional e lembretes locais.

@@ -75,6 +75,9 @@ Verifique revogação da autorização Apple, exclusão de conta no app, políti
 
 ## Android nativo e APK
 
+[Download do APK interno compilado](https://github.com/1kygg/Apk/releases/download/consta-android-893bed7/consta-internal.apk). [Relatório de assinatura, pacote e checksum](https://github.com/1kygg/Apk/releases/tag/consta-android-893bed7). Os valores de API/OAuth deste build estão vazios: ele informa configuração pendente, não permite login fictício. Recompile após informar os valores reais.
+
+
 `npm run android` gera e executa o development build no aparelho/emulador conectado. Não dependa do Expo Go.
 
 ```sh

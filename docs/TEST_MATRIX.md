@@ -87,7 +87,7 @@ Pendentes: build macOS/Xcode, Sign in with Apple com nonce real, Google iOS/URL 
 | --- | --- | --- | --- |
 | Alterações locais da entrega, 08/11/2026 | Linux x64, Node 24.19.0, npm 11.9.0 | `domain` e `training`: TypeScript e suites | 66 testes domain + 12 training aprovados; não comprova sensores, OAuth nem compatibilidade do build Android |
 | Entrega local, 08/11/2026 | Linux x64, Node 24.19.0, PostgreSQL 17.11 | TypeScript completo; 35 mobile, 25 API, 66 domain, 12 training; build API e smoke HTTP do servidor compilado | 138 testes aprovados; 20 casos API com PostgreSQL real e 5 unitários; export Android e prebuild aprovados. SQL local usa SQLite real do Node por adaptador, sem verificar Expo no aparelho. Auth mobile usa mocks; não comprova OAuth nem sensores |
-| Pendente de run | CI PostgreSQL 16 / Ubuntu, Node 22 | typecheck completo, suites, build | Vincular ao run efetivamente concluído |
+| [893bed7 / run 42487145111](https://github.com/1kygg/Apk/actions/runs/42487145111) | CI PostgreSQL 16 / Ubuntu, Node 22 | TypeScript, migrações, 138 testes, API build/smoke HTTP e APK release arm64 | Aprovado; [assinatura, checksum e pacote conferidos](https://github.com/1kygg/Apk/releases/tag/consta-android-893bed7). Sem teste de instalação ou hardware |
 | Pendente | Emulador Android | Fluxos e permissões | Sem evidência ainda |
 | Pendente | Android físico intermediário | GPS, bloqueio, bateria, a11y, release | Sem evidência ainda |
 | Pendente | iOS físico | OAuth, localização, passos e a11y | Sem evidência ainda |

@@ -5,6 +5,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { GpsFilter } from '@consta/domain';
 import { api, ApiError } from './api';
+import {completionPayload,importPayload} from './activity-payload';
 import { getSession, registerSessionCleanup } from './auth';
 import { advanceRecordingClock,addActivityAnomaly } from './recording-model';
 import { AccountScopeError,getAccountScope,captureAccountScope,assertAccountScope,type AccountScope } from './account-scope';
@@ -451,17 +452,11 @@ export async function syncPendingActivities():Promise<void>{
           }
           continue;
         }
-        const payload={
-          clientId:activity.clientId,activeSeconds:Math.floor(activity.activeSeconds),
-          totalSeconds:Math.floor(activity.totalSeconds),distanceMeters:Math.round(activity.distanceMeters),
-          steps:activity.modality!=='cycling'&&activity.stepsReliable?activity.steps??undefined:undefined,
-          completed:true,endedAt:activity.endedAt,notes:activity.notes||undefined,
-          completedOffline:activity.endedOffline,anomalies:[...(activity.anomalies??[])],
-        };
+        const payload=completionPayload(activity);
         try{
           const response=activity.serverId
             ? await api<{id:string;eligibility?:string;ineligibleReason?:string}>('activities/'+activity.serverId+'/complete',{method:'POST',...requestOwner,body:payload})
-            : await api<{id:string;eligibility?:string;ineligibleReason?:string}>('activities/import',{method:'POST',...requestOwner,body:{...payload,modality:activity.modality,source:activity.source,environment:activity.environment,startedAt:activity.startedAt}});
+            : await api<{id:string;eligibility?:string;ineligibleReason?:string}>('activities/import',{method:'POST',...requestOwner,body:importPayload(activity)});
           assertAccountScope(scope);
           activity.serverId=response.id??activity.serverId;
           activity.syncStatus=response.eligibility==='ineligible'?'ineligible':'server_confirmed';

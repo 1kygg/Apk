@@ -2,6 +2,7 @@ import React,{useEffect,useState} from 'react';
 import {AppState,View} from 'react-native';
 import {useAccountApi} from './accountApi';
 import {shareInvite} from '../lib/device';
+import {parseInvite} from '../lib/invites';
 import {Button,Choice,Empty,Field,Loading,Notice,Row,Screen,Section,Sheet,Txt,confirmAction,useAction,useResource} from './components';
 import {ChallengeForm,challengeTypeLabels} from './ChallengeForm';
 import {Challenge,days,Group,Invite,localDate,Member,modalityLabels,sourceLabels} from './types';
@@ -21,7 +22,7 @@ export function Ranking({initialInvite,onInviteHandled}:{initialInvite?:string|n
  const action=useAction();
  useEffect(()=>{if(initialInvite)setInvite(initialInvite);},[initialInvite]);
  async function createGroup(){await action.run(async()=>{if(!name.trim())throw new Error('Informe o nome do grupo.');const g=await api<Group>('/groups',{method:'POST',body:{name:name.trim(),description}});setCreate(false);setName('');setDescription('');await groups.reload();setGroup(g);});}
- async function accept(){await action.run(async()=>{const code=invite.trim().split('/').filter(Boolean).pop()||'';if(!code)throw new Error('Informe um código ou link de convite.');await api<{groupId:string}>('/invites/accept',{method:'POST',body:{code}});setInvite('');onInviteHandled?.();await groups.reload();});}
+ async function accept(){await action.run(async()=>{const code=parseInvite(invite)||'';if(!code)throw new Error('Informe um código ou link de convite.');await api<{groupId:string}>('/invites/accept',{method:'POST',body:{code}});setInvite('');onInviteHandled?.();await groups.reload();});}
  if(group)return <GroupScreen group={group} onBack={()=>{setGroup(null);void groups.reload();}}/>;
  return <Screen title="Ranking" subtitle="Desafios privados. Cada modalidade tem sua própria classificação." onRefresh={groups.reload} refreshing={groups.loading}>
   <Button title="Criar grupo privado" onPress={()=>setCreate(true)}/>

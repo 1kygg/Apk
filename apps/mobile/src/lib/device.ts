@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
 import { api } from './api';
+import {inviteLink} from './invites';
 import { captureAccountScope,assertAccountScope } from './account-scope';
 export async function pickAvatar():Promise<string|null>{
   const scope=captureAccountScope();
@@ -16,12 +17,12 @@ export async function pickAvatar():Promise<string|null>{
   const image=await ImageManipulator.manipulateAsync(result.assets[0].uri,[{resize:{width:512,height:512}}],{compress:0.8,format:ImageManipulator.SaveFormat.JPEG,base64:true});
   assertAccountScope(scope);
   if(!image.base64)throw new Error('Não foi possível preparar o avatar.');
-  const response=await api<{avatarUrl:string}>('me/avatar',{method:'POST',expectedUserId:scope.userId,expectedSessionEpoch:scope.epoch,body:{imageBase64:image.base64,mime:'image/jpeg'}});
+  const response=await api<{avatarUrl:string}>('me/avatar',{method:'POST',expectedUserId:scope.userId,expectedSessionEpoch:scope.epoch,body:{base64:image.base64,mimeType:'image/jpeg'}});
   assertAccountScope(scope);return response.avatarUrl;
 }
 export async function shareInvite(code:string):Promise<void>{
-  const normalized=code.trim();
-  await Share.share({title:'Convite para o Consta',message:'Entre no meu grupo privado do Consta. Código: '+normalized+'\nconsta://invite?code='+encodeURIComponent(normalized),url:'consta://invite?code='+encodeURIComponent(normalized)});
+  const normalized=code.trim();const url=inviteLink(normalized);
+  await Share.share({title:'Convite para o Consta',message:'Entre no meu grupo privado do Consta. Código: '+normalized+'\n'+url,url});
 }
 export function openPrivacySettings(){return Linking.openSettings();}
 export async function timerFeedback(enabled:boolean){if(enabled)await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);}

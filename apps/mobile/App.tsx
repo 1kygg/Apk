@@ -6,6 +6,7 @@ import Storage from 'expo-sqlite/kv-store';
 import {api,ApiError} from './src/lib/api';
 import {getSession,logout,registerSessionCleanup,restoreSession,signInApple,signInGoogle,subscribeSession} from './src/lib/auth';
 import {configuration} from './src/lib/config';
+import {parseInvite} from './src/lib/invites';
 import {getTracker,initializeTracking,listLocalActivities,subscribeTracker,syncPendingActivities} from './src/lib/tracking';
 import type {Session} from './src/lib/types';
 import {Activities} from './src/ui/Activities';
@@ -46,16 +47,15 @@ function Application(){
   const cleanup=registerSessionCleanup(async (action,userId)=>{const current=userId?{user:{id:userId}}:null;setSession(null);sessionRef.current=null;setPreferences(null);setChecking(false);setPending(0);if(action==='delete'&&current){await Storage.removeItem('consta.preferences.'+current.user.id);for(const env of ['default','home','gym','outdoor'])await Storage.removeItem('consta.plan.'+current.user.id+'.'+env);for(const draft of await loadDrafts())if(draft.userId===current.user.id)await removeDraft(draft.planId,current.user.id);}});
   const unsubscribe=subscribeSession(next=>{setSession(next);sessionRef.current=next;if(!next){setPreferences(null);setNeedsOnboarding(false);setChecking(false);setSessionError(null);setTab('Hoje');}});
   void restoreSession().catch(e=>setSessionError(message(e))).finally(()=>setBooting(false));
-  void initializeTracking().catch(e=>setSyncError(message(e)));
   const tracker=subscribeTracker(s=>{setRecording(!!s.activity&&['recording','paused','interrupted','review'].includes(s.activity.status));void updatePending();});
   const net=NetInfo.addEventListener(state=>{const connected=state.isConnected!==false&&state.isInternetReachable!==false;setOffline(!connected);if(connected)void synchronize();});
   const lifecycle=AppState.addEventListener('change',state=>{if(state==='active')void synchronize();});
   const back=BackHandler.addEventListener('hardwareBackPress',()=>{if(tabRef.current!=='Hoje'){setTab('Hoje');return true;}return false;});
-  function receive(url:string){const match=url.match(/^consta:\/\/invite\/([a-zA-Z0-9_-]+)$/);if(match){setInvite(match[1]);setTab('Ranking');}}
+  function receive(url:string){const code=parseInvite(url);if(code){setInvite(code);setTab('Ranking');}}
   void Linking.getInitialURL().then(url=>{if(url)receive(url);});const links=Linking.addEventListener('url',event=>receive(event.url));
   return()=>{cleanup();unsubscribe();tracker();net();lifecycle.remove();back.remove();links.remove();};
  },[]);
- useEffect(()=>{if(session){void checkPreferences(session);void synchronize();}},[session?.user.id]);
+ useEffect(()=>{if(session){void checkPreferences(session);void initializeTracking().then(()=>synchronize()).catch(e=>{if(getSession()?.user.id===session.user.id)setSyncError(message(e));});}},[session?.user.id]);
  useEffect(()=>{if(!session)return;const id=setInterval(()=>{if(AppState.currentState==='active')void synchronize();},20000);return()=>clearInterval(id);},[session?.user.id]);
  function savedPreferences(p:Preferences){setPreferences(p);setNeedsOnboarding(false);if(session)void Storage.setItem('consta.preferences.'+session.user.id,JSON.stringify(p));setPreferencesRevision(v=>v+1);}
  return <SafeAreaView style={{flex:1,backgroundColor:c.background}} edges={['top','bottom']}>

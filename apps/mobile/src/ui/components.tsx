@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TextInputProps, View, ViewStyle } from 'react-native';
-import { api } from '../lib/api';
+import {useAccountApi} from './accountApi';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Storage from 'expo-sqlite/kv-store';
 import { message } from './types';
+import {getAccountScope,assertAccountScope} from '../lib/account-scope';
 
 const dark = { background: '#0D0F0E', surface: '#161A17', text: '#F6F7F4', muted: '#AAB4AC', border: '#303A33', accent: '#8CBF95', onAccent: '#0B2110', error: '#FFB4AB' };
 const light = { background: '#FAFCF9', surface: '#EDF2EC', text: '#101A12', muted: '#526056', border: '#CBD6CA', accent: '#326D40', onAccent: '#FFFFFF', error: '#A32623' };
@@ -49,20 +51,22 @@ export function Loading(){return <View accessibilityLabel="Carregando" style={{p
 export function Empty({text}: {text:string}) {return <Notice>{text}</Notice>;}
 export function Metric({label,value}: {label:string;value:string}){return <View style={{minWidth:'43%',flexGrow:1,gap:3,paddingVertical:9}}><Txt style={{fontSize:29,lineHeight:37,fontWeight:'600'}}>{value}</Txt><Txt muted style={{fontSize:13}}>{label}</Txt></View>;}
 export function Sheet({visible,onClose,title,children}: {visible:boolean;onClose:()=>void;title:string;children:React.ReactNode}) {
-  const {colors:c}=useTheme();return <Modal visible={visible} animationType="none" onRequestClose={onClose} presentationStyle="fullScreen"><View style={{flex:1,backgroundColor:c.background,paddingTop:30}}><Screen title={title} onBack={onClose}>{children}</Screen></View></Modal>;
+  const {colors:c}=useTheme();return <Modal visible={visible} animationType="none" onRequestClose={onClose} presentationStyle="fullScreen"><SafeAreaView style={{flex:1,backgroundColor:c.background}} edges={['top','bottom']}><Screen title={title} onBack={onClose}>{children}</Screen></SafeAreaView></Modal>;
 }
 export function confirmAction(title:string, text:string, action:()=>void|Promise<void>, destructive = false) {
   Alert.alert(title,text,[{text:'Cancelar',style:'cancel'},{text:destructive?'Excluir':'Confirmar',style:destructive?'destructive':'default',onPress:()=>{void action();}}]);
 }
 export function useResource<T>(path:string|null) {
-  const [data,setData]=useState<T|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState<string|null>(null);
-  const load=React.useCallback(async()=>{ if(!path){setData(null);setLoading(false);return;} setLoading(true);setError(null);try{setData(await api<T>(path));}catch(e){setError(message(e));}finally{setLoading(false);}},[path]);
-  useEffect(()=>{void load();},[load]);
+  const api=useAccountApi();
+  const [data,setData]=useState<T|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState<string|null>(null);const version=useRef(0);
+  const load=React.useCallback(async()=>{const requestId=++version.current;if(!path){setData(null);setLoading(false);return;}setLoading(true);setError(null);try{const result=await api<T>(path);if(requestId===version.current)setData(result);}catch(e){if(requestId===version.current)setError(message(e));}finally{if(requestId===version.current)setLoading(false);}},[path]);
+  useEffect(()=>{setData(null);void load();return()=>{version.current++;};},[load]);
   return {data,loading,error,reload:load,setData};
 }
 export function useAction(){
+  const [scope]=useState(()=>getAccountScope());
   const [busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null);
-  const run=async<T,>(fn:()=>Promise<T>):Promise<T|undefined>=>{setBusy(true);setError(null);try{return await fn();}catch(e){setError(message(e));return undefined;}finally{setBusy(false);}};
+  const run=async<T,>(fn:()=>Promise<T>):Promise<T|undefined>=>{setBusy(true);setError(null);try{if(scope)assertAccountScope(scope);return await fn();}catch(e){setError(message(e));return undefined;}finally{setBusy(false);}};
   return {busy,error,run,clear:()=>setError(null)};
 }
 export function Divider(){const {colors:c}=useTheme();return <View style={{height:1,backgroundColor:c.border}}/>;}

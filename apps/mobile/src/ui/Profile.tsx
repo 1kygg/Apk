@@ -1,6 +1,6 @@
 import React,{useEffect,useState} from 'react';
 import {Image,View} from 'react-native';
-import {api} from '../lib/api';
+import {useAccountApi} from './accountApi';
 import {logout,deleteAccount} from '../lib/auth';
 import {pickAvatar,openPrivacySettings} from '../lib/device';
 import {cancelReminders,scheduleReminders} from '../lib/notifications';
@@ -16,6 +16,7 @@ type Reminder={enabled:boolean;days:number[];hour:number;minute:number;quietStar
 function toClock(n:number){return String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0');}
 function toMinute(v:string){if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(v))throw new Error('Use horário no formato HH:mm, por exemplo 08:30.');const [h,m]=v.split(':').map(Number);return h*60+m;}
 export function Profile({onPreferencesChanged}:{onPreferencesChanged:()=>void}){
+ const api=useAccountApi();
  const profile=useResource<Me>('/me'),preferences=useResource<Preferences>('/me/preferences'),reminders=useResource<Reminder>('/me/notifications');
  const [editPreferences,setEditPreferences]=useState(false),[displayName,setDisplayName]=useState(''),[reminderEnabled,setReminderEnabled]=useState(false),[reminderDays,setReminderDays]=useState<number[]>([]),[time,setTime]=useState('08:00'),[quietStart,setQuietStart]=useState('22:00'),[quietEnd,setQuietEnd]=useState('07:00'),[privacy,setPrivacy]=useState(false),[feedback,setFeedback]=useState<string|null>(null);
  const action=useAction(),theme=useTheme();

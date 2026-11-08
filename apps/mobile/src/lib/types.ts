@@ -36,6 +36,7 @@ export interface LocalActivity {
   eligibilityReason: string | null;
   notes: string;
   pointCount: number;
+  anomalies: string[];
   backgroundEnabled: boolean;
 }
 export interface TrackerState {

@@ -1,10 +1,11 @@
 import React, {useState} from 'react';
 import {View} from 'react-native';
-import {api} from '../lib/api';
+import {useAccountApi} from './accountApi';
 import {Button, Choice, Field, Loading, Notice, Row, Screen, Section, Txt, useAction, useResource} from './components';
 import {days, defaultPreferences, environmentLabels, Exercise, modalityLabels, Preferences, Modality} from './types';
 
 export function PreferencesForm({initial,onSaved,onBack,onboarding=false}:{initial?:Preferences;onSaved:(p:Preferences)=>void;onBack?:()=>void;onboarding?:boolean}){
+  const api=useAccountApi();
   const [p,setP]=useState<Preferences>(initial || defaultPreferences());
   const library=useResource<{exercises:Exercise[];equipment:Record<string,string>}>('/exercises');
   const [avoidSearch,setAvoidSearch]=useState('');

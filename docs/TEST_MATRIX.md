@@ -1,12 +1,12 @@
 # Matriz de verificação
 
-**Estado inicial:** código e suites entregues para execução; resultados devem ser vinculados a um run do CI e a uma revisão. Este arquivo não declara testes físicos realizados. O terminal da sessão de implementação não estava utilizável; o CI remoto é o caminho de execução automatizada.
+**Estado de verificação:** resultados automatizados devem ser vinculados ao comando executado, à revisão e, quando aplicável, ao run do CI. Este arquivo não declara testes físicos realizados. O ambiente local foi disponibilizado no encerramento da implementação; o CI também executa as verificações automatizadas.
 
 Registre a revisão, data, sistema, aparelho e resultado em cada execução. Não marque um item como aprovado apenas porque existe teste, mock, tela ou integração compilável.
 
 ## Automação
 
-Comandos: `npm run typecheck`, `npm test`, `npm run api:migrate`, `npm run api:build`. Integração real: `RUN_DB_TESTS=1` com DATABASE_URL/TEST_DATABASE_URL apontando a **PostgreSQL 16 descartável**, e `npm run test:integration`. Fixtures removem tabelas/dados de teste; nunca use banco pessoal ou de produção.
+Comandos: `npm run typecheck`, `npm test`, `npm run api:migrate`, `npm run api:build`. Integração real: `RUN_DB_TESTS=1` com DATABASE_URL/TEST_DATABASE_URL apontando a **PostgreSQL 16 ou 17 descartável**, e `npm run test:integration`. Fixtures removem tabelas/dados de teste; nunca use banco pessoal ou de produção.
 
 O [workflow](../.github/workflows/ci.yml) executa TypeScript, migrações, suites de todos os workspaces, integração com PostgreSQL e build da API. O resultado de cada etapa é a evidência; uma execução interrompida ou falha não é aprovação.
 
@@ -85,7 +85,9 @@ Pendentes: build macOS/Xcode, Sign in with Apple com nonce real, Google iOS/URL 
 
 | Revisão / run | Ambiente | Casos | Resultado / evidências |
 | --- | --- | --- | --- |
-| A preencher após execução | CI PostgreSQL 16 / Ubuntu | typecheck, suites, build | Link exato do run e falhas corrigidas |
+| Alterações locais da entrega, 08/11/2026 | Linux x64, Node 24.19.0, npm 11.9.0 | `domain` e `training`: TypeScript e suites | 66 testes domain + 12 training aprovados; não comprova sensores, OAuth nem compatibilidade do build Android |
+| Entrega local, 08/11/2026 | Linux x64, Node 24.19.0, PostgreSQL 17.11 | TypeScript completo; 28 mobile, 25 API, 66 domain, 12 training; build API | 131 testes aprovados; 20 casos API com PostgreSQL real e 5 unitários; export Android e prebuild aprovados. Auth mobile usa mocks; não comprova OAuth nem sensores |
+| Pendente de run | CI PostgreSQL 16 / Ubuntu, Node 22 | typecheck completo, suites, build | Vincular ao run efetivamente concluído |
 | Pendente | Emulador Android | Fluxos e permissões | Sem evidência ainda |
 | Pendente | Android físico intermediário | GPS, bloqueio, bateria, a11y, release | Sem evidência ainda |
 | Pendente | iOS físico | OAuth, localização, passos e a11y | Sem evidência ainda |

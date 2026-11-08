@@ -1,22 +1,25 @@
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import type { FastifyInstance, FastifyRequest, preHandlerHookHandler } from "fastify";
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import { localDate, ProfilePreferencesSchema, type ProfilePreferences } from "@consta/domain";
-import { EXERCISES, EQUIPMENT_LABELS, applySubstitution, generatePlan, getCompatibleSubstitutions, getExercise, type DayPlan, type ExerciseAdaptation, type PlanProgress, type TrainingEnvironment, type TrainingHistorySession } from "@consta/training";
+import { EXERCISES, EQUIPMENT_LABELS, applySubstitution, generatePlan, getCompatibleSubstitutions, getExercise, type DayPlan, type PlanProgress, type TrainingEnvironment, type TrainingHistorySession } from "@consta/training";
 
 type ActivityInput = { clientId: string; modality: ProfilePreferences["modalities"][number]; source: "self_reported"; environment: TrainingEnvironment; planId: string };
 export interface PlanRouteOptions {
   pool: Pool;
   authenticate: preHandlerHookHandler;
   startActivity: (userId: string, input: ActivityInput) => Promise<{ id: string }>;
-  completeActivity: (userId: string, activityId: string, input: { activeSeconds: number; notes?: string; adaptations?: string }) => Promise<{ id: string }>;
+  completeActivity: (userId: string, activityId: string, input: { activeSeconds: number; notes?: string; adaptations?: string; completedOffline?: boolean; endedAt?: string }, context?: {verifiedEndAt:string;receivedAt:string}) => Promise<{ id: string }>;
 }
+type FrozenCompletion = { activeSeconds: number; notes: string; adaptations: string; completedOffline: boolean; endedAt?: string; serverFinishedAt:string };
 interface PlanRow {
   id: string; user_id: string; local_date: Date | string; environment: TrainingEnvironment;
   payload: DayPlan; status: "draft" | "started" | "completed"; activity_id: string | null;
   started_snapshot: DayPlan | null; progress: PlanProgress;
   started_at: Date | string | null; finished_at: Date | string | null;
+  completion_payload: FrozenCompletion | null;
 }
 const environmentSchema = z.enum(["home","gym","outdoor"]);
 const idSchema = z.object({ id: z.string().uuid() });
@@ -36,8 +39,10 @@ const progressSchema = z.object({
 const finishSchema = z.object({
   activeSeconds: z.number().int().min(0).max(86400).optional(),
   notes: z.string().max(2000).optional(),
-  adaptations: z.record(adaptationSchema).optional()
-}).strict();
+  adaptations: z.record(adaptationSchema).optional(),
+  completedOffline: z.boolean().optional(),
+  endedAt: z.string().datetime().optional()
+}).strict().refine(value => !value.completedOffline || !!value.endedAt, {message:"Informe o horário original da conclusão offline.",path:["endedAt"]});
 function fail(statusCode: number, code: string, message: string): never {
   throw Object.assign(new Error(message), { statusCode, code });
 }
@@ -129,9 +134,9 @@ async function connectActivity(options: PlanRouteOptions, row: PlanRow): Promise
 }
 export async function registerPlanRoutes(app: FastifyInstance, options: PlanRouteOptions): Promise<void> {
   const { pool,authenticate } = options;
-  app.get("/v1/exercises",{preHandler:authenticate},async () => ({ exercises: EXERCISES, equipment: EQUIPMENT_LABELS }));
+  app.get("/exercises",{preHandler:authenticate},async () => ({ exercises: EXERCISES, equipment: EQUIPMENT_LABELS }));
 
-  app.get("/v1/plans/today",{preHandler:authenticate},async request => {
+  app.get("/plans/today",{preHandler:authenticate},async request => {
     const uid = userId(request);
     const profile = await preferences(pool,uid);
     const query = parse(z.object({environment:environmentSchema.optional()}).strict(),request.query);
@@ -154,7 +159,7 @@ export async function registerPlanRoutes(app: FastifyInstance, options: PlanRout
     return dto(row);
   });
 
-  app.post("/v1/plans/:id/substitute",{preHandler:authenticate},async request => {
+  app.post("/plans/:id/substitute",{preHandler:authenticate},async request => {
     const uid = userId(request), {id} = parse(idSchema,request.params);
     const body = parse(z.object({exerciseId:z.string().min(1).max(100),replacementId:z.string().min(1).max(100)}).strict(),request.body);
     const profile = await preferences(pool,uid);
@@ -170,7 +175,7 @@ export async function registerPlanRoutes(app: FastifyInstance, options: PlanRout
     });
   });
 
-  app.post("/v1/plans/:id/start",{preHandler:authenticate},async request => {
+  app.post("/plans/:id/start",{preHandler:authenticate},async request => {
     const uid = userId(request), {id} = parse(idSchema,request.params);
     parse(z.object({clientId:z.string().uuid()}).strict(),request.body);
     const profile = await preferences(pool,uid);
@@ -192,11 +197,20 @@ export async function registerPlanRoutes(app: FastifyInstance, options: PlanRout
     return {plan:dto(row),activity:result.activity};
   });
 
-  app.patch("/v1/plans/:id/progress",{preHandler:authenticate},async request => {
+  app.patch("/plans/:id/progress",{preHandler:authenticate},async request => {
     const uid = userId(request), {id} = parse(idSchema,request.params);
     const body = parse(progressSchema,request.body);
     const profile = await preferences(pool,uid);
     return locked(pool,uid,id,async (client,row) => {
+      if (row.status === "completed" || row.completion_payload) {
+        // An offline outbox may replay the exact progress PATCH after the
+        // following finish succeeded but its acknowledgement was lost.
+        const unchanged = (body.notes === undefined || body.notes === row.progress.notes)
+          && Object.entries(body.sets ?? {}).every(([slot,value]) => isDeepStrictEqual(row.progress.sets[slot],value))
+          && Object.entries(body.adaptations ?? {}).every(([slot,value]) => isDeepStrictEqual(row.progress.adaptations[slot],value));
+        if (unchanged) return dto(row);
+        fail(409,"session_not_active","A conclusão já foi salva. A versão e as adaptações permanecem no histórico.");
+      }
       if (row.status !== "started") fail(409,"session_not_active","Inicie a sessão antes de marcar séries; sessões concluídas preservam o histórico.");
       const progress = mergeProgress(row,body,profile);
       const updated = await client.query<PlanRow>("UPDATE daily_plans SET progress=$1::jsonb WHERE id=$2 RETURNING *",[JSON.stringify(progress),id]);
@@ -205,23 +219,48 @@ export async function registerPlanRoutes(app: FastifyInstance, options: PlanRout
     });
   });
 
-  app.post("/v1/plans/:id/finish",{preHandler:authenticate},async request => {
+  app.post("/plans/:id/finish",{preHandler:authenticate},async request => {
     const uid = userId(request), {id} = parse(idSchema,request.params);
     const body = parse(finishSchema,request.body);
     const profile = await preferences(pool,uid);
-    let row = await locked(pool,uid,id,async (client,current) => {
-      if (current.status === "draft") fail(409,"session_not_started","Inicie a sessão antes de concluir.");
-      if (current.status === "completed") return current;
+    let row = await owned(pool,uid,id);
+    if (row.status === "draft") fail(409,"session_not_started","Inicie a sessão antes de concluir.");
+    if (row.status === "completed" && !row.activity_id) return {plan:dto(row),activity:null};
+    // Recover a partially completed start with the same canonical activity key.
+    // Never call an activity transaction while holding the plan row lock: it
+    // may need foreign-key locks on this plan and ranking locks of its own.
+    if (!row.activity_id) row = (await connectActivity(options,row)).row;
+    row = await locked(pool,uid,id,async (client,current) => {
+      if (current.completion_payload) return current;
       const progress = mergeProgress(current,{adaptations:body.adaptations,notes:body.notes},profile);
-      const updated = await client.query<PlanRow>("UPDATE daily_plans SET progress=$1::jsonb WHERE id=$2 RETURNING *",[JSON.stringify(progress),id]);
+      const clock = await client.query<{started_at:Date; now:Date}>(
+        "SELECT started_at,clock_timestamp() AS now FROM activities WHERE id=$1 AND user_id=$2",[current.activity_id,uid]);
+      const activity = clock.rows[0];
+      if (!activity) fail(409,"activity_missing","A atividade desta sessão não está disponível.");
+      // Use PostgreSQL's clock and the actual server-issued activity start, not
+      // the device clock or an earlier plan transition preceding a retry.
+      const originalEnd = body.completedOffline ? Date.parse(body.endedAt!) : new Date(activity.now).getTime();
+      const actualStart = new Date(activity.started_at).getTime();
+      if (originalEnd < actualStart || originalEnd > new Date(activity.now).getTime()+60000) fail(400,"invalid_finish_time","Confira o horário original da conclusão; ele precisa estar entre o início confirmado e o momento atual.");
+      const elapsed = Math.max(0,Math.floor((originalEnd-actualStart)/1000));
+      const activeSeconds = body.activeSeconds ?? Math.min(elapsed,86400);
+      if (activeSeconds > elapsed+1) fail(400,"invalid_active_time","O tempo ativo não pode superar o tempo transcorrido desde o início confirmado.");
+      const completion: FrozenCompletion = {
+        activeSeconds, notes: progress.notes, completedOffline: body.completedOffline ?? false,
+        serverFinishedAt: new Date(activity.now).toISOString(),
+        ...(body.completedOffline ? {endedAt: body.endedAt!} : {}),
+        adaptations: Object.entries(progress.adaptations).map(([slot,value]) => slot + ": " + JSON.stringify(value)).join("; ").slice(0,2000)
+      };
+      // Freeze before the external transaction. Concurrent requests and retries
+      // after an acknowledgement was lost must reuse this exact fingerprint.
+      const updated = await client.query<PlanRow>("UPDATE daily_plans SET progress=$1::jsonb,completion_payload=$2::jsonb WHERE id=$3 RETURNING *",[JSON.stringify(progress),JSON.stringify(completion),id]);
       return updated.rows[0]!;
     });
-    if (row.status === "completed" && !row.activity_id) return {plan:dto(row),activity:null};
-    // Recovery after process/network interruption uses the same server-issued ID.
-    if (!row.activity_id) row = (await connectActivity(options,row)).row;
-    const elapsed = row.started_at ? Math.max(0,Math.floor((Date.now()-new Date(row.started_at).getTime())/1000)) : 0;
-    const adaptations = Object.entries(row.progress.adaptations).map(([slot,value]) => slot + ": " + JSON.stringify(value)).join("; ").slice(0,2000);
-    const activity = await options.completeActivity(uid,row.activity_id!,{activeSeconds:body.activeSeconds ?? Math.min(elapsed,86400),notes:row.progress.notes,adaptations});
+    const {serverFinishedAt,...completion} = row.completion_payload!;
+    // Context is supplied only from the persisted server clock, separately from
+    // the public completion body. A staged finish can survive a process crash
+    // without moving its trusted finish/receipt into the retry day.
+    const activity = await options.completeActivity(uid,row.activity_id!,completion,{verifiedEndAt:serverFinishedAt,receivedAt:serverFinishedAt});
     row = await locked(pool,uid,id,async (client,current) => {
       if (current.status === "completed") return current;
       const updated = await client.query<PlanRow>("UPDATE daily_plans SET status='completed',finished_at=clock_timestamp() WHERE id=$1 RETURNING *",[id]);

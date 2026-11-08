@@ -33,3 +33,8 @@ export function activityMetrics(activity: {distanceMeters:number;activeSeconds:n
     timingBasis:'active' as const,
   };
 }
+
+/** Preserve structured integrity flags independently from changing UI messages. */
+export function addActivityAnomaly<T extends {anomalies?:string[]}>(activity:T,anomaly:string):T&{anomalies:string[]}{
+  return {...activity,anomalies:[...new Set([...(activity.anomalies??[]),anomaly])]};
+}

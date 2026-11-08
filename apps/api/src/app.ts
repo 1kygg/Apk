@@ -20,7 +20,6 @@ export async function buildApp({pool,verifyIdentity,config=readConfig()}:BuildAp
   installErrors(app);
   app.setNotFoundHandler((_request,reply)=>reply.code(404).send({error:{code:'NOT_FOUND',message:'Recurso não encontrado.'}}));
   await app.register(rateLimit,{max:180,timeWindow:'1 minute'});
-  app.decorateRequest('user',null);
   app.decorateRequest('sessionFamilyId','');
   const auth=createAuthService(pool,config,verifyIdentity);
   const activities=createActivityService(pool);

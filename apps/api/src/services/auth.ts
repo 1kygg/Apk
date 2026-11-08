@@ -50,6 +50,8 @@ export function createAuthService(pool: Pool, config: ApiConfig, injectedVerifie
   }
   return {
     async createNonce() {
+      assertReady();
+      if(!config.appleClientIds.length&&!injectedVerifier)throw new ApiError(503,'APPLE_UNCONFIGURED','Configure os identificadores de login da Apple.');
       const nonce = opaque();
       const nonceHash = hashToken(nonce);
       const result = await pool.query('INSERT INTO apple_nonces(nonce_hash) VALUES($1) RETURNING id', [nonceHash]);
@@ -99,7 +101,7 @@ export function createAuthService(pool: Pool, config: ApiConfig, injectedVerifie
         const {sessionId: _sessionId, ...body} = issued;
         return {body} as const;
       });
-      if ('error' in result) throw new ApiError(401, result.error, 'Sua sessão expirou. Entre novamente.');
+      if ('error' in result) throw new ApiError(401, result.error ?? 'INVALID_REFRESH', 'Sua sessão expirou. Entre novamente.');
       return result.body;
     },
     async logout(userId: string, familyId: string, refreshToken?: string) {

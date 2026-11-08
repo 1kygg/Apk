@@ -52,3 +52,9 @@ export async function recomputeUserGroups(client: PoolClient, userId: string): P
   // Stable lock order prevents concurrent completions in several groups from deadlocking.
   for (const row of challenges.rows) await recomputeChallenge(client, row.id);
 }
+
+/** Serialize score mutations before locking activities or their foreign keys. */
+export async function lockUserChallenges(client: PoolClient, userId: string): Promise<void> {
+  const result=await client.query('SELECT c.id FROM challenges c JOIN group_members m ON m.group_id=c.group_id WHERE m.user_id=$1 ORDER BY c.id',[userId]);
+  for(const row of result.rows)await lockKey(client,'challenge:'+row.id);
+}

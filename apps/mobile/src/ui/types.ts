@@ -17,7 +17,7 @@ export type Exercise = {
   sets?: number; repetitions?: number; durationSeconds?: number; restSeconds?: number;
   media?: {kind: 'svg'; svg: string; license: string; author: string; description: string};
 };
-export type PlannedExercise = Exercise & { exerciseId: string; sets: number; restSeconds: number };
+export type PlannedExercise = Exercise & { exerciseId: string; sets: number; restSeconds: number; substitutionIds: string[] };
 export type DayPlan = {
   id: string; date: string; environment: Environment; kind: 'training' | 'rest';
   focus: string; reason: string; warmup: string[]; exercises: PlannedExercise[];

@@ -24,10 +24,10 @@ Gere o segredo fora do aplicativo, por exemplo `node -e "console.log(require('no
 
 ## Banco e API
 
-O arquivo `compose.yaml` fornece o PostgreSQL para desenvolvimento. Defina as credenciais conforme esse arquivo e seu `.env`. O banco de teste precisa existir separadamente se for executar integração local.
+O arquivo `compose.yaml` fornece o PostgreSQL para desenvolvimento. Ao executar a API pelo npm, suba somente o serviço `postgres` para evitar duas instâncias tentando usar a porta 3000. Para subir a API compilada em contêiner, use `docker compose up -d --build` em vez de `npm run api:dev`. Defina as credenciais conforme esse arquivo e seu `.env`. O banco de teste precisa existir separadamente se for executar integração local.
 
 ```sh
-docker compose up -d
+docker compose up -d postgres
 npm run api:migrate
 npm run api:dev
 ```

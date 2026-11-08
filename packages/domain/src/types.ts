@@ -1,6 +1,9 @@
 import { DateTime, IANAZone } from 'luxon';
 import { z } from 'zod';
 
+// Resource guard for materialized calendar previews/recomputation, not a competition preset.
+export const MAX_CALENDAR_DAYS = 100_000;
+
 export const ModalitySchema = z.enum(['strength', 'walking', 'running', 'cycling', 'football', 'basketball', 'volleyball']);
 export type Modality = z.infer<typeof ModalitySchema>;
 export const ActivitySourceSchema = z.enum(['self_reported', 'gps', 'manual', 'health_connect', 'healthkit']);
@@ -54,6 +57,9 @@ const RulesObjectSchema = z.object({
 export const ChallengeRulesSchema = RulesObjectSchema.superRefine((rules, context) => {
   const issue = (path: string, message: string) => context.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
   if (DateTime.fromISO(rules.endsAt).toMillis() <= DateTime.fromISO(rules.startsAt).toMillis()) issue('endsAt', 'O encerramento deve ser posterior ao início.');
+  const firstDate = DateTime.fromISO(rules.startsAt).setZone(rules.timezone).startOf('day');
+  const lastDate = DateTime.fromISO(rules.endsAt).minus({ milliseconds: 1 }).setZone(rules.timezone).startOf('day');
+  if (lastDate.diff(firstDate, 'days').days + 1 > MAX_CALENDAR_DAYS) issue('endsAt', 'O período excede o limite técnico de processamento do calendário. Reduza o intervalo.');
   if (!DateTime.fromISO(rules.endsAt).plus({ hours: rules.syncGraceHours }).isValid) issue('syncGraceHours', 'O prazo de sincronização excede o intervalo de datas representável.');
   if (rules.dailyCap > rules.weeklyCap) issue('dailyCap', 'O limite diário não pode exceder o semanal.');
   if ((rules.weeklyGoal ?? rules.weeklyCap) > rules.weeklyCap) issue('weeklyGoal', 'A meta semanal não pode exceder o limite semanal.');

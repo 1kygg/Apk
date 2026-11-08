@@ -27,6 +27,7 @@ export function registerActivityRoutes(app:FastifyInstance,{pool,authenticate,se
   app.delete('/activities/:id',secured,async request=>{
     const {id}=idParams.parse(request.params);
     await withTransaction(pool,async client=>{
+      await lockKey(client,'user-activities:'+request.user.id);
       const affected=await client.query('SELECT c.id FROM challenges c JOIN group_members m ON m.group_id=c.group_id WHERE m.user_id=$1 ORDER BY c.id',[request.user.id]);
       for(const challenge of affected.rows)await lockKey(client,'challenge:'+challenge.id);
       const found=await client.query('SELECT user_id FROM activities WHERE id=$1 AND user_id=$2 FOR UPDATE',[id,request.user.id]);
@@ -34,7 +35,7 @@ export function registerActivityRoutes(app:FastifyInstance,{pool,authenticate,se
       const groups=await client.query('SELECT group_id FROM group_members WHERE user_id=$1 ORDER BY group_id',[request.user.id]);
       // Keep the immutable exercise snapshot but erase this session's private execution data.
       await client.query('DELETE FROM daily_plan_events WHERE plan_id IN (SELECT id FROM daily_plans WHERE activity_id=$1)',[id]);
-      await client.query('UPDATE daily_plans SET progress=$2 WHERE activity_id=$1',[id,JSON.stringify({sets:{},adaptations:{},notes:''})]);
+      await client.query("UPDATE daily_plans SET activity_id=NULL,progress=$2,completion_payload=NULL,status='completed',finished_at=COALESCE(finished_at,clock_timestamp()) WHERE activity_id=$1",[id,JSON.stringify({sets:{},adaptations:{},notes:''})]);
       await client.query('DELETE FROM activities WHERE id=$1',[id]);
       for(const group of groups.rows)await audit(client,{groupId:group.group_id,actorId:request.user.id,action:'activity_deleted',details:{activityId:id}});
       await recomputeUserGroups(client,request.user.id);
@@ -62,6 +63,10 @@ export function registerActivityRoutes(app:FastifyInstance,{pool,authenticate,se
       activeSeconds:z.number().int().min(0).max(604800).optional(),
     }).strict().parse(request.body);
     return withTransaction(pool,async client=>{
+      const owner=await client.query('SELECT user_id FROM activities WHERE id=$1',[id]);
+      if(!owner.rowCount)throw new ApiError(404,'ACTIVITY_NOT_FOUND','Registro concluído não encontrado.');
+      await lockKey(client,'user-activities:'+owner.rows[0].user_id);
+      await lockKey(client,'challenge:'+input.challengeId);
       const challenge=await requireChallenge(client,input.challengeId,request.user.id,true);
       const rules=parseRules(challenge.rules);
       const found=await client.query('SELECT *,clock_timestamp() AS now FROM activities WHERE id=$1 FOR NO KEY UPDATE',[id]);

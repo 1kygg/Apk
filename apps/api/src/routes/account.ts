@@ -78,6 +78,7 @@ export function registerAccountRoutes(app:FastifyInstance,{pool,authenticate}:{p
   app.delete('/me',secured,async request=>{
     z.object({confirm:z.literal(true)}).parse(request.body);
     await withTransaction(pool,async client=>{
+      await lockKey(client,'user-activities:'+request.user.id);
       const memberships=await client.query('SELECT g.id FROM groups g JOIN group_members m ON m.group_id=g.id WHERE m.user_id=$1 ORDER BY g.id FOR UPDATE OF g',[request.user.id]);
       const affected=await client.query('SELECT c.id FROM challenges c JOIN group_members m ON m.group_id=c.group_id WHERE m.user_id=$1 ORDER BY c.id',[request.user.id]);
       for(const challenge of affected.rows)await lockKey(client,'challenge:'+challenge.id);

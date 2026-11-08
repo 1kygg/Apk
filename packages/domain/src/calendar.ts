@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import { type ChallengeRules, type MaximumResult, type ScoreUnit } from './types';
+import { MAX_CALENDAR_DAYS, type ChallengeRules, type MaximumResult, type ScoreUnit } from './types';
 
 export interface CalendarDay {
   date: string;
@@ -43,7 +43,7 @@ function wallBoundary(day: DateTime, minute: number, end: boolean): number {
   if (!boundary.isValid) return NaN;
   if (boundary.hour * 60 + boundary.minute !== minute) {
     for (let count = 0; count < 180; count += 1) {
-      const previous = boundary.minus({ minutes: 1 });
+      const previous: DateTime = boundary.minus({ minutes: 1 });
       if (previous.toISODate() !== day.toISODate() || previous.hour * 60 + previous.minute < minute) break;
       boundary = previous;
     }
@@ -93,6 +93,10 @@ function dateHasOpportunity(day: DateTime, rules: ChallengeRules): boolean {
 export function calendarDays(rules: ChallengeRules): CalendarDay[] {
   const first = DateTime.fromISO(rules.startsAt, { setZone: true }).setZone(rules.timezone).startOf('day');
   const lastMs = DateTime.fromISO(rules.endsAt, { setZone: true }).minus({ milliseconds: 1 }).setZone(rules.timezone).startOf('day').toMillis();
+  const localEnd = DateTime.fromMillis(lastMs, { zone: rules.timezone });
+  if (!first.isValid || !localEnd.isValid || localEnd.diff(first, 'days').days + 1 > MAX_CALENDAR_DAYS) {
+    throw new RangeError('Período fora do limite técnico de processamento do calendário.');
+  }
   const result: CalendarDay[] = [];
   for (let day = first; day.toMillis() <= lastMs; day = day.plus({ days: 1 }).startOf('day')) {
     const date = day.toISODate()!;

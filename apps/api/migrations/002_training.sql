@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS daily_plans (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   started_at timestamptz,
   finished_at timestamptz,
+  completion_payload jsonb CHECK (completion_payload IS NULL OR jsonb_typeof(completion_payload) = 'object'),
   UNIQUE (user_id, local_date, environment),
   CHECK ((status = 'draft' AND started_snapshot IS NULL AND started_at IS NULL) OR
          (status IN ('started','completed') AND started_snapshot IS NOT NULL AND started_at IS NOT NULL)),
@@ -31,6 +32,10 @@ CREATE TABLE IF NOT EXISTS daily_plan_events (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 CREATE OR REPLACE FUNCTION preserve_started_plan() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  redacting_execution boolean := OLD.activity_id IS NOT NULL AND NEW.activity_id IS NULL
+    AND NEW.completion_payload IS NULL
+    AND NEW.progress = '{"sets":{},"adaptations":{},"notes":""}'::jsonb;
 BEGIN
   IF NEW.id <> OLD.id OR NEW.user_id <> OLD.user_id OR NEW.local_date <> OLD.local_date OR NEW.environment <> OLD.environment THEN
     RAISE EXCEPTION 'Plan identity is immutable' USING ERRCODE = '23514';
@@ -40,6 +45,12 @@ BEGIN
   END IF;
   IF OLD.status <> 'draft' AND NEW.payload IS DISTINCT FROM OLD.payload THEN
     RAISE EXCEPTION 'Started plan content is immutable; use progress adaptations' USING ERRCODE = '23514';
+  END IF;
+  IF NOT redacting_execution AND OLD.completion_payload IS NOT NULL AND NEW.completion_payload IS DISTINCT FROM OLD.completion_payload THEN
+    RAISE EXCEPTION 'Staged completion is immutable' USING ERRCODE = '23514';
+  END IF;
+  IF NOT redacting_execution AND OLD.completion_payload IS NOT NULL AND NEW.progress IS DISTINCT FROM OLD.progress THEN
+    RAISE EXCEPTION 'Staged completion progress is immutable' USING ERRCODE = '23514';
   END IF;
   IF (OLD.status = 'completed' AND NEW.status <> 'completed') OR (OLD.status = 'started' AND NEW.status = 'draft') THEN
     RAISE EXCEPTION 'Plan status cannot move backwards' USING ERRCODE = '23514';

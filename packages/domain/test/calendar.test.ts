@@ -95,3 +95,12 @@ describe('configurações e calendário real', () => {
     expect(() => rules({ type: 'steps', dailyCap: 2.5, weeklyCap: 10 })).toThrow();
   });
 });
+
+// Prevent authenticated malformed requests from materializing millennia of dates.
+describe('calendar resource bounds', () => {
+  it('rejects an excessive calendar before enumeration', () => {
+    const excessive = { ...rules(), startsAt: '0001-01-01T00:00:00Z', endsAt: '9999-12-31T23:59:59Z' };
+    expect(() => validateRules(excessive)).toThrow('limite técnico');
+    expect(() => calendarDays(excessive)).toThrow('limite técnico');
+  });
+});

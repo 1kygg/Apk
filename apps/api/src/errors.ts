@@ -14,7 +14,7 @@ export function installErrors(app: FastifyInstance): void {
     const pgCode = (error as {code?: string}).code;
     if (pgCode === '23505') return reply.code(409).send({error: {code: 'CONFLICT', message: 'Este registro já existe.'}});
     if (pgCode === '23503') return reply.code(409).send({error: {code: 'RELATED_RECORD', message: 'Um registro relacionado não está disponível.'}});
-    if (error.statusCode && error.statusCode < 500) return reply.code(error.statusCode).send({error: {code: 'REQUEST_REJECTED', message: error.message}});
+    if (error.statusCode && error.statusCode < 500) return reply.code(error.statusCode).send({error: {code: typeof error.code==='string' ? error.code : 'REQUEST_REJECTED', message: error.message}});
     // Never include tokens, request bodies, database details or health data in logs/responses.
     return reply.code(500).send({error: {code: 'INTERNAL', message: 'Não foi possível concluir. Tente novamente.'}});
   });

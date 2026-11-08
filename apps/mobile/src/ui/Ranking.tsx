@@ -1,6 +1,6 @@
 import React,{useEffect,useState} from 'react';
 import {AppState,View} from 'react-native';
-import {api} from '../lib/api';
+import {useAccountApi} from './accountApi';
 import {shareInvite} from '../lib/device';
 import {Button,Choice,Empty,Field,Loading,Notice,Row,Screen,Section,Sheet,Txt,confirmAction,useAction,useResource} from './components';
 import {ChallengeForm,challengeTypeLabels} from './ChallengeForm';
@@ -9,17 +9,19 @@ import {Challenge,days,Group,Invite,localDate,Member,modalityLabels,sourceLabels
 type RankingResult={items:{userId:string;displayName:string;position:number;total:number;weeksMet:number}[];updatedAt:string;unit:string;maximum:{total:number;unit:string;weeks:{weekStart:string;regularDates:string[];maximum:number}[]}};
 type Notification={id:string;title:string;message:string;createdAt:string;readAt?:string};
 export function Notifications(){
+ const api=useAccountApi();
  const resource=useResource<{items:Notification[]}>('/notifications'),action=useAction();
  const unread=resource.data?.items.filter(n=>!n.readAt)||[];
  return <Section title="Avisos do grupo">{resource.loading?<Loading/>:resource.error?<Notice error>{resource.error}</Notice>:!unread.length?<Txt muted>Nenhum aviso pendente.</Txt>:unread.slice(0,12).map(n=><View key={n.id} style={{gap:8,paddingVertical:8}}><Txt style={{fontWeight:'600'}}>{n.title}</Txt><Txt>{n.message}</Txt><Txt muted>{localDate(n.createdAt)}</Txt><Button title="Marcar como lido" variant="quiet" busy={action.busy} onPress={()=>action.run(async()=>{await api('/notifications/'+n.id+'/read',{method:'PATCH'});await resource.reload();})}/></View>)}{action.error&&<Notice error>{action.error}</Notice>}<Txt muted>Estes avisos são consultados no aplicativo. Não são notificações push remotas.</Txt></Section>;
 }
 export function Ranking({initialInvite,onInviteHandled}:{initialInvite?:string|null;onInviteHandled?:()=>void}){
+ const api=useAccountApi();
  const groups=useResource<{items:Group[]}>('/groups');
  const [group,setGroup]=useState<Group|null>(null),[create,setCreate]=useState(false),[invite,setInvite]=useState(initialInvite||''),[name,setName]=useState(''),[description,setDescription]=useState('');
  const action=useAction();
  useEffect(()=>{if(initialInvite)setInvite(initialInvite);},[initialInvite]);
  async function createGroup(){await action.run(async()=>{if(!name.trim())throw new Error('Informe o nome do grupo.');const g=await api<Group>('/groups',{method:'POST',body:{name:name.trim(),description}});setCreate(false);setName('');setDescription('');await groups.reload();setGroup(g);});}
- async function accept(){await action.run(async()=>{const code=invite.trim().split('/').filter(Boolean).pop()||'';if(!code)throw new Error('Informe um código ou link de convite.');const result=await api<Group|{group:Group}>('/invites/accept',{method:'POST',body:{code}});setInvite('');onInviteHandled?.();await groups.reload();if('group' in result)setGroup(result.group);else if('id' in result)setGroup(result);});}
+ async function accept(){await action.run(async()=>{const code=invite.trim().split('/').filter(Boolean).pop()||'';if(!code)throw new Error('Informe um código ou link de convite.');await api<{groupId:string}>('/invites/accept',{method:'POST',body:{code}});setInvite('');onInviteHandled?.();await groups.reload();});}
  if(group)return <GroupScreen group={group} onBack={()=>{setGroup(null);void groups.reload();}}/>;
  return <Screen title="Ranking" subtitle="Desafios privados. Cada modalidade tem sua própria classificação." onRefresh={groups.reload} refreshing={groups.loading}>
   <Button title="Criar grupo privado" onPress={()=>setCreate(true)}/>
@@ -58,7 +60,7 @@ function ChallengeScreen({challenge:c,canAdmin,onBack,onEdit,onDuplicate}:{chall
   {c.description&&<Txt>{c.description}</Txt>}<Row><Choice title="Classificação" selected={tab==='ranking'} onPress={()=>setTab('ranking')}/><Choice title="Regulamento e calendário" selected={tab==='rules'} onPress={()=>setTab('rules')}/><Choice title="Histórico" selected={tab==='history'} onPress={()=>setTab('history')}/></Row>
   {tab==='ranking'?<><Txt muted>Última atualização: {localDate(ranking.data?.updatedAt)}. Atualização automática com o aplicativo em primeiro plano.</Txt>{ranking.loading&&!ranking.data?<Loading/>:ranking.error?<Notice error>{ranking.error}</Notice>:!ranking.data?.items.length?<Empty text="Ainda não há resultados elegíveis. Nenhum participante ou ponto de demonstração é exibido."/>:ranking.data.items.map(p=><Section key={p.userId}><Row><Txt style={{fontWeight:'700',fontSize:22}}>{p.position}º</Txt><View style={{flex:1}}><Txt>{p.displayName}</Txt><Txt muted>{p.weeksMet} semanas com a meta cumprida</Txt></View><Txt style={{fontWeight:'700'}}>{p.total.toLocaleString('pt-BR',{maximumFractionDigits:2})} {ranking.data?.unit==='kilometers'?'km':ranking.data?.unit==='steps'?'passos':'pts'}</Txt></Row></Section>)}<Notice>Empates podem compartilhar a posição. Trajetos, e-mails e dados detalhados de saúde não são públicos no ranking.</Notice></>:tab==='rules'?<>
    <Section title="Período"><Txt>{localDate(rules.startsAt)} até {localDate(rules.endsAt)}</Txt><Txt>Fuso: {rules.timezone}</Txt><Txt>Dias válidos: {rules.validDays.map(d=>days[d-1]).join(', ')}</Txt><Txt>Reposição: {rules.makeupDays.length?rules.makeupDays.map(d=>days[d-1]).join(', '):'nenhuma'}</Txt><Txt>Semana começa em {days[rules.weekStartsOn-1]}</Txt><Txt muted>Reposição recupera oportunidade anterior perdida na mesma semana, sem aumentar o limite.</Txt></Section>
-   <Section title="Como pontuar"><Txt>Limite diário: {rules.dailyCap} · semanal: {rules.weeklyCap}</Txt>{rules.type==='consistency'&&<Txt>Dia concluído: {rules.pointsPerDay} ponto(s). Uma sessão adaptada vale o mesmo que uma de maior dificuldade.</Txt>}<Txt>Tempo ativo mínimo: {rules.minimumActiveSeconds} segundos</Txt><Txt>Modalidades: {rules.allowedModalities.map(m=>modalityLabels[m]).join(', ')}</Txt><Txt>Fontes: {rules.acceptedSources.map(s=>sourceLabels[s]||s).join(', ')}</Txt><Txt>Janela: {rules.windowStartMinute===undefined?'todo o dia':minuteClock(rules.windowStartMinute)+' até '+minuteClock(rules.windowEndMinute||0)}</Txt><Txt>Sincronização: até {rules.syncGraceHours}h · offline sem horário validável: {rules.offlinePolicy==='review'?'revisão':'salvo sem pontuar'}</Txt><Txt>Desempate: {rules.tieBreak==='weeks_met'?'semanas com a meta cumprida; depois, posição compartilhada':'posição compartilhada'}</Txt><Notice>O servidor define o dia pelo horário validado de início, no fuso do desafio. Sessões precisam respeitar o período e a janela de elegibilidade. O relógio do celular não altera a classificação.</Notice></Section>
+   <Section title="Como pontuar"><Txt>Limite diário: {rules.dailyCap} · semanal: {rules.weeklyCap}</Txt>{rules.type==='consistency'&&<Txt>Dia concluído: {rules.pointsPerDay} ponto(s). Uma sessão adaptada vale o mesmo que uma de maior dificuldade.</Txt>}<Txt>Tempo ativo mínimo: {rules.minimumActiveSeconds} segundos</Txt><Txt>Modalidades: {rules.allowedModalities.map(m=>modalityLabels[m]).join(', ')}</Txt><Txt>Fontes: {rules.acceptedSources.map(s=>sourceLabels[s]||s).join(', ')}</Txt><Txt>Janela: {rules.windowStartMinute===undefined?'todo o dia':minuteClock(rules.windowStartMinute)+' até '+minuteClock(rules.windowEndMinute||0)}</Txt><Txt>Sincronização: até {rules.syncGraceHours}h · offline sem horário validável: {rules.offlinePolicy==='review'?'revisão':'salvo sem pontuar'}</Txt><Txt>Desempate: {rules.tieBreak==='weeks_met'?'semanas com a meta cumprida; depois, posição compartilhada':'posição compartilhada'}</Txt><Notice>O servidor atribui a sessão ao dia do início validado, no fuso do desafio. Sessões que passam da meia-noite continuam nesse dia; o intervalo inteiro precisa caber no período do desafio e, quando configurada, na janela de horário. Atividades que atravessam o início ou o encerramento do desafio não pontuam. O relógio do celular não altera a classificação.</Notice></Section>
    {ranking.data?.maximum&&<Section title="Máximo possível no calendário"><Txt>{ranking.data.maximum.total} {ranking.data.maximum.unit==='points'?'pontos':ranking.data.maximum.unit==='kilometers'?'km':'passos'}</Txt>{ranking.data.maximum.weeks.map(w=><Txt muted key={w.weekStart}>Semana {w.weekStart}: até {w.maximum} · {w.regularDates.length} dias regulares no período</Txt>)}</Section>}
   </>:<Audit groupId={c.groupId} challengeId={c.id}/>}
   {canAdmin&&<><ReviewQueue challengeId={c.id}/><Section title="Administração"><Button title="Editar regras e revisar impacto" variant="quiet" onPress={onEdit}/><Button title="Duplicar com novas datas" variant="quiet" onPress={onDuplicate}/></Section></>}
@@ -71,6 +73,7 @@ function Audit({groupId,challengeId}:{groupId:string;challengeId?:string}){
  return <Section title="Histórico de alterações">{resource.loading?<Loading/>:resource.error?<Notice error>{resource.error}</Notice>:!items.length?<Empty text="Nenhuma alteração registrada."/>:items.map(a=><View key={a.id} style={{gap:5,paddingVertical:8}}><Txt>{a.action} · {a.actorDisplayName}</Txt><Txt muted>{localDate(a.createdAt)}</Txt>{a.reason&&<Txt>{a.reason}</Txt>}</View>)}</Section>;
 }
 function GroupAdmin({group:g,onBack}:{group:Group;onBack:()=>void}){
+ const api=useAccountApi();
  const members=useResource<{items:Member[]}>('/groups/'+g.id+'/members'),invites=useResource<{items:Invite[]}>('/groups/'+g.id+'/invites');
  const [latest,setLatest]=useState<Invite|null>(null),[daysValue,setDaysValue]=useState('7'),action=useAction();
  async function makeInvite(){await action.run(async()=>{const result=await api<Invite>('/groups/'+g.id+'/invites',{method:'POST',body:{expiresInDays:Number(daysValue)}});setLatest(result);await invites.reload();});}
@@ -85,6 +88,7 @@ function GroupAdmin({group:g,onBack}:{group:Group;onBack:()=>void}){
 
 type ReviewItem={activityId:string;displayName:string;modality:string;source:string;eligibility:string;ineligibleReason?:string;recordedStartAt:string;recordedEndAt:string;activeSeconds:number;distanceMeters:number|null;steps:number|null;decision:null|'approve'|'reject'};
 function ReviewQueue({challengeId}:{challengeId:string}){
+ const api=useAccountApi();
  const resource=useResource<{items:ReviewItem[]}>('/challenges/'+challengeId+'/review-queue');
  const [selected,setSelected]=useState<ReviewItem|null>(null),[reason,setReason]=useState(''),[start,setStart]=useState(''),[end,setEnd]=useState(''),[distance,setDistance]=useState(''),[active,setActive]=useState('');
  const action=useAction();

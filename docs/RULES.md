@@ -54,3 +54,7 @@ Excluir ou corrigir uma atividade exige recalcular os resultados relacionados de
 São filtradas posições sem qualidade suficiente, horários fora de ordem, saltos e velocidades incompatíveis com a modalidade. Lacunas e pausas interrompem segmentos: não se soma uma linha atravessando um período sem dados. O trajeto pode ter partes sem registro, e isso permanece visível.
 
 Ritmo e velocidade usam **tempo ativo**, excluindo pausas; tempo total é mostrado separadamente. Esteira, bicicleta ergométrica e esportes podem ser registrados manualmente, com origem explícita. Distância manual não é apresentada como GPS.
+
+## Limite de processamento
+
+Datas, duração e limites de pontuação são definidos por desafio. O calendário materializado tem uma proteção técnica de 100.000 dias por intervalo para impedir requisições que consumam memória e CPU enumerando milênios de datas. Intervalos maiores são rejeitados antes da enumeração, com erro de configuração; essa proteção não define a duração usual ou a pontuação de uma competição.

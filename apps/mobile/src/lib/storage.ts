@@ -9,6 +9,7 @@ export interface StoredActivity extends LocalActivity {
   endedOffline: boolean;
   stepsEnabled: boolean;
   pendingDelete?: boolean;
+  captureStartedAt?: number;
 }
 let opening: Promise<SQLite.SQLiteDatabase> | undefined;
 export async function database() {
@@ -91,11 +92,12 @@ export async function queued(ownerId: string): Promise<string[]> {
   const rows = await (await database()).getAllAsync<{client_id:string}>('SELECT client_id FROM outbox WHERE owner_id=? ORDER BY rowid', ownerId);
   return rows.map(r => r.client_id);
 }
-export async function acknowledge(activity: StoredActivity) {
+export async function acknowledge(activity: StoredActivity,assertCurrent:()=>void=()=>{}) {
   const db = await database();
   await db.withTransactionAsync(async () => {
-    await putActivity(activity);
-    await db.runAsync('DELETE FROM outbox WHERE client_id=? AND owner_id=?', activity.clientId,activity.ownerId);
+    assertCurrent();
+    await putActivity(activity);assertCurrent();
+    await db.runAsync('DELETE FROM outbox WHERE client_id=? AND owner_id=?', activity.clientId,activity.ownerId);assertCurrent();
   });
 }
 export async function markAttempt(id: string, code: string) {

@@ -21,3 +21,13 @@ describe('private route sharing',()=>{
     expect(xml.match(/<trkseg>/g)).toHaveLength(1);expect(xml).toContain('<trkpt lat="0.0100000"');
   });
 });
+
+describe('hidden endpoint edges',()=>{
+  it('breaks a visible edge that crosses the hidden start circle',()=>{
+    const route=[0,.003,.004,-.003,-.004,.020,.021].map(x=>point(x));
+    const segments=privateRouteSegments(route,200);
+    expect(segments.some(s=>s.some(p=>p.latitude>0)&&s.some(p=>p.latitude<0))).toBe(false);
+    expect(segments.map(s=>s.map(p=>p.latitude))).toContainEqual([.003,.004]);
+    expect(segments.map(s=>s.map(p=>p.latitude))).toContainEqual([-.003,-.004]);
+  });
+});

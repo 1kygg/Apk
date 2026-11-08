@@ -24,6 +24,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: 'app.consta.mobile',
     versionCode: 1,
+    allowBackup: false,
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: true,
     permissions: ['android.permission.ACTIVITY_RECOGNITION'],

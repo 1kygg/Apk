@@ -196,7 +196,9 @@ async function beginNativeLocation(background:boolean){
     current.backgroundEnabled=true;
   }else if(background){
     const permission=await Location.requestBackgroundPermissionsAsync();
+    assertAccountScope(scope);
     if(!permission.granted)throw new ApiError('O registro com tela bloqueada não foi autorizado. Inicie sem essa opção ou ajuste a permissão nos Ajustes.','BACKGROUND_LOCATION_DENIED');
+    nativeTaskScope=scope;
     await Location.startLocationUpdatesAsync(LOCATION_TASK,{
       ...options,showsBackgroundLocationIndicator:true,
       activityType:current.modality==='cycling'?Location.ActivityType.OtherNavigation:Location.ActivityType.Fitness,

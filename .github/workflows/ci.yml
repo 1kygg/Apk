@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: consta-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   lockfile:
@@ -110,6 +110,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   android:
+    if: github.event_name != 'pull_request'
     name: APK Android nativo para teste interno
     needs: quality
     runs-on: ubuntu-24.04

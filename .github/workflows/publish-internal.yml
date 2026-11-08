@@ -1,0 +1,65 @@
+name: Consta — download do APK verificado
+on:
+  push:
+    branches: [codex/consta-apk-download]
+    paths: [.github/workflows/publish-internal.yml]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_RUN: '42487145111'
+      SOURCE_SHA: '893bed757c766e99182f25b1edb316fc4f460285'
+      RELEASE_TAG: consta-android-893bed7
+    steps:
+      - name: Confirmar build e revisão de origem
+        shell: bash
+        run: |
+          gh run view "$SOURCE_RUN" --json headSha,conclusion > run.json
+          node -e 'const r=require("./run.json");if(r.headSha!==process.env.SOURCE_SHA||r.conclusion!=="success")throw Error("Build de origem não confirmado");'
+      - name: Baixar e verificar o APK já compilado
+        shell: bash
+        run: |
+          gh run download "$SOURCE_RUN" --name consta-android-internal-9 --dir release
+          (cd release && sha256sum -c SHA256SUMS.txt)
+          sdk_dir="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          apk_signer="$(rg --files "$sdk_dir/build-tools" -g apksigner | sort -V | tail -n 1)"
+          test -n "$apk_signer"
+          "$apk_signer" verify --verbose --print-certs release/consta-internal.apk > release/apk-verification.txt
+          "$(dirname "$apk_signer")/aapt" dump badging release/consta-internal.apk > release/apk-package.txt
+          python3 - <<'PY'
+          import re,zipfile
+          with zipfile.ZipFile('release/consta-internal.apk') as apk:
+            assert apk.testzip() is None
+            names=apk.namelist()
+            assert 'AndroidManifest.xml' in names and 'classes.dex' in names
+            assert 'assets/index.android.bundle' in names
+            assert any(n.startswith('lib/arm64-v8a/') for n in names)
+            assert not any(n.startswith(('lib/x86/','lib/x86_64/','lib/armeabi-v7a/')) for n in names)
+          package=open('release/apk-package.txt').read()
+          assert "name='app.consta.mobile'" in package
+          assert "sdkVersion:'26'" in package
+          assert "targetSdkVersion:'36'" in package
+          assert not re.search(r"uses-permission: name='android.permission.(CAMERA|RECORD_AUDIO|READ_CONTACTS|ACCESS_BACKGROUND_LOCATION)'",package)
+          print('APK íntegro, assinatura validada, pacote/SDK e arquitetura confirmados.')
+          PY
+      - name: Disponibilizar download de teste interno
+        shell: bash
+        run: |
+          cat > release-notes.md <<'NOTES'
+          Aplicativo nativo Consta para Android arm64, Android 8.0 ou superior. Build release com assinatura de desenvolvimento, destinado a teste interno.
+
+          **Configuração necessária:** sem URL HTTPS da API e IDs OAuth reais, a entrada informa configuração pendente. Não há login de demonstração. As instruções completas estão em README.md e docs/SETUP.md da revisão de origem.
+
+          Verificação: TypeScript, 138 testes automatizados, PostgreSQL real, SQL/rollback SQLite por adaptador Node, build e smoke HTTP da API e compilação Android. APK conferido com checksum SHA256, apksigner e aapt. Isso não comprova instalação, OAuth, sensores, tela bloqueada, acessibilidade ou desempenho em aparelho; essas verificações continuam pendentes.
+
+          Baixe consta-internal.apk e abra no Android. SHA256SUMS.txt contém o checksum; os demais arquivos registram certificado público, pacote e verificação. Nenhuma chave privada é publicada. A versão iOS exige Mac/Xcode e configuração própria. Não há importação Health Connect/HealthKit; passos usam pedômetro nativo opcional.
+
+          Código: 893bed757c766e99182f25b1edb316fc4f460285. Nenhum serviço pago foi ativado.
+          NOTES
+          gh release create "$RELEASE_TAG" release/consta-internal.apk release/SHA256SUMS.txt release/signing-certificate.txt release/INSTALL.txt release/apk-verification.txt release/apk-package.txt --target "$SOURCE_SHA" --title 'Consta — Android para teste interno' --notes-file release-notes.md --prerelease

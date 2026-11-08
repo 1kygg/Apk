@@ -86,7 +86,7 @@ Pendentes: build macOS/Xcode, Sign in with Apple com nonce real, Google iOS/URL 
 | Revisão / run | Ambiente | Casos | Resultado / evidências |
 | --- | --- | --- | --- |
 | Alterações locais da entrega, 08/11/2026 | Linux x64, Node 24.19.0, npm 11.9.0 | `domain` e `training`: TypeScript e suites | 66 testes domain + 12 training aprovados; não comprova sensores, OAuth nem compatibilidade do build Android |
-| Entrega local, 08/11/2026 | Linux x64, Node 24.19.0, PostgreSQL 17.11 | TypeScript completo; 28 mobile, 25 API, 66 domain, 12 training; build API | 131 testes aprovados; 20 casos API com PostgreSQL real e 5 unitários; export Android e prebuild aprovados. Auth mobile usa mocks; não comprova OAuth nem sensores |
+| Entrega local, 08/11/2026 | Linux x64, Node 24.19.0, PostgreSQL 17.11 | TypeScript completo; 28 mobile, 25 API, 66 domain, 12 training; build API e smoke HTTP do servidor compilado | 131 testes aprovados; 20 casos API com PostgreSQL real e 5 unitários; export Android e prebuild aprovados. Auth mobile usa mocks; não comprova OAuth nem sensores |
 | Pendente de run | CI PostgreSQL 16 / Ubuntu, Node 22 | typecheck completo, suites, build | Vincular ao run efetivamente concluído |
 | Pendente | Emulador Android | Fluxos e permissões | Sem evidência ainda |
 | Pendente | Android físico intermediário | GPS, bloqueio, bateria, a11y, release | Sem evidência ainda |

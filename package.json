@@ -23,7 +23,8 @@
     "api:start": "node scripts/with-env.mjs run start --workspace @consta/api",
     "android": "node scripts/with-env.mjs run android --workspace @consta/mobile",
     "ios": "node scripts/with-env.mjs run ios --workspace @consta/mobile",
-    "android:apk": "bash scripts/build-android.sh"
+    "android:apk": "bash scripts/build-android.sh",
+    "api:smoke": "node scripts/with-env.mjs --exec node scripts/smoke-api.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.18.0",

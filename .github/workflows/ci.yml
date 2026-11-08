@@ -97,6 +97,7 @@ jobs:
       - run: npm run api:migrate
       - run: npm test
       - run: npm run api:build
+      - run: npm run api:smoke
       - name: Resumo de validação
         if: always()
         shell: bash

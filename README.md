@@ -38,6 +38,7 @@ npm run typecheck
 npm test
 npm run test:integration
 npm run api:build
+npm run api:smoke
 npm run android:apk
 ```
 

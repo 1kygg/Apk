@@ -42,7 +42,12 @@ export async function database() {
         last_error TEXT
       );
       CREATE TABLE IF NOT EXISTS local_meta (key TEXT PRIMARY KEY,value TEXT NOT NULL);
-      PRAGMA user_version = 1;
+      INSERT INTO local_meta(key,value)
+        SELECT 'active.'||a.owner_id,m.value FROM local_meta m
+        JOIN local_activities a ON a.client_id=m.value WHERE m.key='active'
+        ON CONFLICT(key) DO NOTHING;
+      DELETE FROM local_meta WHERE key='active';
+      PRAGMA user_version = 2;
     `);
     return db;
   })();
@@ -72,13 +77,13 @@ export async function readRoute(id: string, ownerId: string): Promise<RoutePoint
   const db = await database();
   return db.getAllAsync<RoutePoint>('SELECT latitude,longitude,accuracy,timestamp,segment FROM route_points WHERE client_id=? AND EXISTS(SELECT 1 FROM local_activities a WHERE a.client_id=? AND a.owner_id=?) ORDER BY timestamp,id', id,id,ownerId);
 }
-export async function setActiveId(id: string | null) {
+export async function setActiveId(id: string | null, ownerId: string) {
   const db = await database();
-  if (id) await db.runAsync("INSERT INTO local_meta(key,value) VALUES('active',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", id);
-  else await db.runAsync("DELETE FROM local_meta WHERE key='active'");
+  if (id) await db.runAsync("INSERT INTO local_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", "active."+ownerId,id);
+  else await db.runAsync("DELETE FROM local_meta WHERE key=?", "active."+ownerId);
 }
-export async function getActiveId(): Promise<string | null> {
-  const row = await (await database()).getFirstAsync<{value:string}>("SELECT value FROM local_meta WHERE key='active'");
+export async function getActiveId(ownerId: string): Promise<string | null> {
+  const row = await (await database()).getFirstAsync<{value:string}>("SELECT value FROM local_meta WHERE key=?", "active."+ownerId);
   return row?.value ?? null;
 }
 export async function enqueue(activity: StoredActivity) {
@@ -110,6 +115,7 @@ export async function deleteOwnerData(ownerId: string) {
   const db = await database();
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM local_activities WHERE owner_id=?', ownerId);
+    await db.runAsync('DELETE FROM local_meta WHERE key=?','active.'+ownerId);
     await db.runAsync("DELETE FROM local_meta WHERE key LIKE ?", 'reminders.'+ownerId+'%');
   });
 }

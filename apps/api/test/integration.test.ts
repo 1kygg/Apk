@@ -46,6 +46,7 @@ describe.runIf(enabled)('PostgreSQL integration (test verifier injection; not re
   beforeAll(async()=>{
     const connectionString=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     if(!connectionString)throw new Error('RUN_DB_TESTS=1 exige TEST_DATABASE_URL ou DATABASE_URL de teste.');
+    if(!/(^|[_-])test([_-]|$)/i.test(new URL(connectionString).pathname.slice(1)))throw new Error('Fixtures destrutivas exigem banco com nome de teste, como consta_test.');
     pool=new Pool({connectionString,max:16});
     await migrate(pool);
     await migrate(pool);

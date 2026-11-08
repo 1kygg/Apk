@@ -110,7 +110,7 @@ async function hydrateForBackground():Promise<boolean>{
   const scope=getAccountScope();
   if(!scope){await stopNativeLocation();return false;}
   if(current)return current.ownerId===scope.userId;
-  const id=await getActiveId();assertAccountScope(scope);if(!id)return false;
+  const id=await getActiveId(scope.userId);assertAccountScope(scope);if(!id)return false;
   const stored=await readActivity(id,scope.userId);assertAccountScope(scope);
   if(!stored)return false;
   current=stored;
@@ -260,7 +260,7 @@ export async function initializeTracking():Promise<void>{
   initialized=true;initializedScope=scope;
   await locked(async()=>{
     assertAccountScope(scope);
-    const id=await getActiveId();assertAccountScope(scope);
+    const id=await getActiveId(scope.userId);assertAccountScope(scope);
     if(id){
       const existing=await readActivity(id,userId);assertAccountScope(scope);
       if(existing){
@@ -325,11 +325,11 @@ export async function startCardio(modality:CardioModality,options:{background?:b
         current.eligibilityReason='Iniciada sem confirmação do servidor. Será preservada no histórico e poderá precisar de revisão para pontuar.';
       }
     }else current.eligibilityReason='Iniciada offline. Horário não validado para pontuação; histórico será preservado.';
-    resetClock();await putActivity(current);await setActiveId(current.clientId);
+    resetClock();await putActivity(current);await setActiveId(current.clientId,scope.userId);
     try{await beginNativeLocation(options.background??(Platform.OS==='android'));await beginSteps();}
     catch(error){
       await stopNativeLocation();
-      await removeActivity(current.clientId,current.ownerId);await setActiveId(null);current=null;filter=null;
+      await removeActivity(current.clientId,current.ownerId);await setActiveId(null,scope.userId);current=null;filter=null;
       throw error;
     }
     await persist();ensureTimer();emit();
@@ -370,7 +370,7 @@ export async function saveCardio(notes=''):Promise<LocalActivity>{
   const result=await scopedLocked(async scope=>{
     if(!current||current.status!=='review')throw new ApiError('Finalize a sessão antes de salvar.','REVIEW_REQUIRED');
     current.notes=notes.trim().slice(0,2000);current.status='saved';current.syncStatus='pending';
-    await enqueue(current);await setActiveId(null);const result=publicActivity(current);emit();return result;
+    await enqueue(current);await setActiveId(null,scope.userId);const result=publicActivity(current);emit();return result;
   });
   void syncPendingActivities().catch(()=>{});
   return result;
@@ -381,7 +381,7 @@ export async function discardCardio():Promise<void>{
     await stopNativeLocation();
     // Server start rows carry no completed points; attempt cleanup without blocking local discard.
     if(current.serverId)try{await api('activities/'+current.serverId,{method:'DELETE',expectedUserId:scope.userId,expectedSessionEpoch:scope.epoch});}catch{/* Remains incomplete and cannot score. */}
-    await removeActivity(current.clientId,current.ownerId);await setActiveId(null);
+    await removeActivity(current.clientId,current.ownerId);await setActiveId(null,scope.userId);
     current=null;filter=null;route=[];lastError=null;emit();
   });
 }
@@ -396,7 +396,7 @@ export async function deleteLocalActivity(clientId:string):Promise<void>{
   await scopedLocked(async scope=>{
     const activity=await readActivity(clientId,ownerId());
     if(!activity)return;
-    if(current?.clientId===clientId){await stopNativeLocation();await setActiveId(null);current=null;filter=null;route=[];}
+    if(current?.clientId===clientId){await stopNativeLocation();await setActiveId(null,scope.userId);current=null;filter=null;route=[];}
     await deleteRoute(clientId);
     if(activity.serverId){
       activity.pendingDelete=true;activity.syncStatus='pending';activity.pointCount=0;
@@ -485,7 +485,7 @@ registerSessionCleanup(async(action,previousOwner)=>{
         if(['recording','paused'].includes(current.status))current.status='interrupted';
         current.stepsReliable=false;await persist();
       }
-      if(action==='delete'&&owner){await deleteOwnerData(owner);await setActiveId(null);}
+      if(action==='delete'&&owner){await deleteOwnerData(owner);await setActiveId(null,owner);}
     }finally{
       // A storage failure must never leave another account's runtime visible
       // or keep its native recorder alive after identity invalidation.

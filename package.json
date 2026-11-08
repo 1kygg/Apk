@@ -1,0 +1,33 @@
+{
+  "name": "consta",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Treinos e desafios privados entre amigos — aplicativo nativo",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "packageManager": "npm@10.9.2",
+  "workspaces": [
+    "apps/mobile",
+    "apps/api",
+    "packages/domain",
+    "packages/training"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:integration": "node scripts/with-env.mjs run test:integration --workspace @consta/api",
+    "api:dev": "node scripts/with-env.mjs run dev --workspace @consta/api",
+    "api:migrate": "node scripts/with-env.mjs run migrate --workspace @consta/api",
+    "api:build": "npm run build --workspace @consta/api",
+    "api:start": "node scripts/with-env.mjs run start --workspace @consta/api",
+    "android": "node scripts/with-env.mjs run android --workspace @consta/mobile",
+    "ios": "node scripts/with-env.mjs run ios --workspace @consta/mobile",
+    "android:apk": "bash scripts/build-android.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "typescript": "5.9.2",
+    "vitest": "3.2.4"
+  }
+}

@@ -57,7 +57,7 @@ jobs:
 
           O GPS depende de localização e sinal do aparelho. O traçado dos pontos é desenhado offline, sem mapa de ruas. Compartilhar por outro aplicativo pode exigir a conexão daquele aplicativo. Não há ranking sincronizado entre celulares nem recuperação na nuvem.
 
-          Verificado: TypeScript e 177 testes no CI, incluindo perfil/SQLite/pontos/cardio com adaptadores, compilação Android, checksum e assinatura. Teste de interface em emulador está em execução separada; não está declarado aprovado nesta release inicial. Sensores, fotos/permissões físicas, tela bloqueada, iOS, acessibilidade e desempenho em aparelho continuam sem verificação física.
+          Verificado: TypeScript e 177 testes no CI, incluindo perfil/SQLite/pontos/cardio com adaptadores, compilação Android, checksum e assinatura. Interface verificada em Android 35/x86_64 com modo avião: criação de perfil, registro manual de futebol, 1 ponto e persistência após fechar/reabrir. Evidência: https://github.com/1kygg/Apk/actions/runs/42608028196 . O teste usa o mesmo código de aplicativo do APK arm64; foto não foi selecionada. Sensores, fotos/permissões físicas, tela bloqueada, iOS, acessibilidade e desempenho em aparelho continuam sem verificação física.
 
           Baixe consta-offline.apk e abra no celular para instalar. Assinatura de desenvolvimento para teste interno, sem publicação em loja. Nenhuma chave privada ou conta de demonstração é publicada. Foto e registros ficam neste aparelho; apagar dados/desinstalar pode remover o histórico. Horários são os do aparelho e conclusões são autodeclaradas.
 
@@ -66,4 +66,18 @@ jobs:
           mv release/consta-internal.apk release/consta-offline.apk
           sed -i 's/consta-internal.apk/consta-offline.apk/' release/SHA256SUMS.txt
           (cd release && sha256sum -c SHA256SUMS.txt)
-          gh release create "$RELEASE_TAG" release/consta-offline.apk release/SHA256SUMS.txt release/signing-certificate.txt release/INSTALL.txt release/apk-verification.txt release/apk-package.txt --target "$SOURCE_SHA" --title 'Consta Offline 1.1.0 — perfil e pontos sem login' --notes-file release-notes.md --prerelease
+          if gh release view "$RELEASE_TAG" --json targetCommitish > existing-release.json 2>/dev/null; then
+            node -e 'if(require("./existing-release.json").targetCommitish!==process.env.SOURCE_SHA)throw Error("A release não corresponde à revisão verificada");'
+            gh release edit "$RELEASE_TAG" --notes-file release-notes.md
+          else
+            gh release create "$RELEASE_TAG" release/consta-offline.apk release/SHA256SUMS.txt release/signing-certificate.txt release/INSTALL.txt release/apk-verification.txt release/apk-package.txt --target "$SOURCE_SHA" --title 'Consta Offline 1.1.0 — perfil e pontos sem login' --notes-file release-notes.md --prerelease
+          fi
+      - name: Preservar evidência da interface offline
+        shell: bash
+        run: |
+          test "$(gh run view 42608028196 --json conclusion --jq .conclusion)" = success
+          test "$(gh run view 42608028196 --json headSha --jq .headSha)" = ec9d1613243a53e93c9f66da819682505696189b
+          gh run download 42608028196 --name consta-offline-emulator-3 --dir evidence
+          node -e 'const r=require("./evidence/result.json");if(r.success!==true)throw Error("Teste offline não confirmado");'
+          cp evidence/result.json evidence/emulator-verification.json
+          gh release upload "$RELEASE_TAG" evidence/emulator-verification.json evidence/01-local-point-offline.png evidence/02-local-point-after-restart.png --clobber

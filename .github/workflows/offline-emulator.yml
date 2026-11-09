@@ -11,6 +11,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build-x86:
+    if: github.ref_name != 'codex/consta-offline-emulator'
     name: Compilar Android x86_64 para teste
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -41,16 +42,24 @@ jobs:
   offline-emulator:
     name: Perfil e pontuação sem internet no Android
     needs: build-x86
+    if: always() && !cancelled() && (needs.build-x86.result == 'success' || needs.build-x86.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     env:
       GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: ${{ github.ref_name == 'codex/consta-offline-emulator' && '42605679692' || github.run_id }}
+      SOURCE_SHA: ${{ github.ref_name == 'codex/consta-offline-emulator' && '5d2140f3fc26e036d862abbda1f5e17cbdaec86e' || github.sha }}
+      SOURCE_ARTIFACT: ${{ github.ref_name == 'codex/consta-offline-emulator' && 'consta-offline-x86-2' || format('consta-offline-x86-{0}', github.run_number) }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
       - name: Baixar APK x86_64 desta revisão
-        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name 'consta-offline-x86-${{ github.run_number }}' --dir artifacts/android
+        shell: bash
+        run: |
+          test "$(gh run view "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --json headSha --jq .headSha)" = "$SOURCE_SHA"
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir artifacts/android
+          (cd artifacts/android && sha256sum -c SHA256SUMS.txt)
       - name: Configurar caminhos do SDK Android
         shell: bash
         run: |
@@ -64,9 +73,22 @@ jobs:
         shell: bash
         run: |
           test -e /dev/kvm
+          android_home="$RUNNER_TEMP/consta-android"
+          export ANDROID_USER_HOME="$android_home"
+          export ANDROID_EMULATOR_HOME="$android_home"
+          export ANDROID_AVD_HOME="$android_home/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "ANDROID_USER_HOME=$ANDROID_USER_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_EMULATOR_HOME=$ANDROID_EMULATOR_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
           sudo chmod 666 /dev/kvm
           sdkmanager 'emulator' 'system-images;android-35;google_apis;x86_64'
-          echo no | avdmanager create avd --force --name consta_offline --package 'system-images;android-35;google_apis;x86_64' --device pixel_6
+          echo no | avdmanager create avd --force --name consta_offline --package 'system-images;android-35;google_apis;x86_64' --device pixel_6 --path "$ANDROID_AVD_HOME/consta_offline.avd"
+          test -f "$ANDROID_AVD_HOME/consta_offline.avd/config.ini"
+          # Some command-line tool versions use a different default preferences directory.
+          printf 'avd.ini.encoding=UTF-8\npath=%s\ntarget=android-35\n' "$ANDROID_AVD_HOME/consta_offline.avd" > "$ANDROID_AVD_HOME/consta_offline.ini"
+          emulator -list-avds | tee "$RUNNER_TEMP/consta-avds.txt"
+          grep -Fx consta_offline "$RUNNER_TEMP/consta-avds.txt"
       - name: Iniciar emulador e executar interface offline real
         timeout-minutes: 11
         shell: bash

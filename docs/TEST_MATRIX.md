@@ -31,7 +31,7 @@ Para rodar a integração histórica, use banco **descartável de teste**, `TEST
 
 ## Emulador Android
 
-Pendente até execução registrada com development/release build. A criação de perfil e os testes abaixo não exigem API, OAuth ou servidor.
+Execução registrada em [Android 35/x86_64, run 42608028196](https://github.com/1kygg/Apk/actions/runs/42608028196): instalação do APK release, modo avião com Wi-Fi/dados desativados, criação de nome pela interface, registro manual de futebol, 1 ponto exibido e persistência após force-stop/reabertura. Foto não foi selecionada nesse teste. Sensores, permissões, segundo plano, acessibilidade e os demais casos abaixo continuam sem comprovação nativa. O código do aplicativo testado é idêntico ao da revisão 746bd0d; o commit do teste altera somente o workflow do emulador.
 
 | Caso | Procedimento e resultado esperado |
 | --- | --- |
@@ -88,9 +88,9 @@ Pendentes: compilação Mac/Xcode, instalação, foto persistente, permissões d
 
 | Revisão/run | Ambiente | Resultado e limite |
 | --- | --- | --- |
-| Implementação local 1.1.0, 09/11/2026 | Linux, testes Node/SQLite por adaptador | Suites locais de perfil, pontuação, armazenamento, cardio mockado e treinos executadas durante a implementação. Contagem/revisão final serão registradas ao encerrar a validação; não comprova SDK em aparelho |
-| Novo APK local | CI Android | Em preparação; vincular somente quando o build e a verificação concluírem |
+| Implementação local 1.1.0, 09/11/2026 | Linux, testes Node/SQLite por adaptador | Suites locais de perfil, pontuação, armazenamento, cardio mockado e treinos executadas durante a implementação. 157 testes locais aprovados: 74 mobile, 66 domínio, 12 treino e 5 API; 20 testes PostgreSQL não foram executados localmente nesta revisão; não comprova SDK em aparelho |
+| [746bd0d / run 42604239761](https://github.com/1kygg/Apk/actions/runs/42604239761) | Node 22, PostgreSQL 16 e build Android arm64 | 177 testes aprovados, TypeScript, prebuild, compilação e [assinatura/checksum](https://github.com/1kygg/Apk/releases/tag/consta-offline-v1.1.0-746bd0d) conferidos |
 | [893bed7 / run 42487145111](https://github.com/1kygg/Apk/actions/runs/42487145111) | Entrega histórica com servidor, Node 22/PostgreSQL 16 | 138 testes e APK anterior aprovados, com [assinatura/checksum](https://github.com/1kygg/Apk/releases/tag/consta-android-893bed7). Não comprova a criação de perfil offline da versão 1.1.0 |
-| Emulador Android | Pendente | Sem evidência registrada nesta revisão |
+| [Run 42608028196](https://github.com/1kygg/Apk/actions/runs/42608028196) | Emulador Android 35/x86_64, release, modo avião | Perfil, esporte manual, 1 ponto e persistência após reabrir aprovados pela interface real; foto/sensores não testados |
 | Android físico intermediário | Pendente | GPS, tela bloqueada, pedômetro, permissões, acessibilidade e release |
 | iOS físico | Pendente | Instalação, movimento, localização, notificações e acessibilidade |

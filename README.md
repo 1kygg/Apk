@@ -4,7 +4,11 @@ Aplicativo **nativo** de treinos em português do Brasil, com perfil básico e p
 
 ## Android
 
-**Novo APK offline em preparação.** O link da versão local será incluído quando o build e suas verificações terminarem. A release anterior `consta-android-893bed7` pertence à versão com login pendente; ela não contém esta mudança.
+**[Baixar Consta Offline 1.1.0](https://github.com/1kygg/Apk/releases/download/consta-offline-v1.1.0-746bd0d/consta-offline.apk)** · [assinatura e checksum](https://github.com/1kygg/Apk/releases/tag/consta-offline-v1.1.0-746bd0d).
+
+[177 testes e build Android aprovados](https://github.com/1kygg/Apk/actions/runs/42604239761). O [teste de interface no Android 35 em modo avião](https://github.com/1kygg/Apk/actions/runs/42608028196) criou perfil pela tela, registrou um esporte manual, mostrou 1 ponto e preservou perfil/ponto após encerrar e reabrir o processo. O teste não selecionou foto nem mediu GPS, sensores, tela bloqueada, FPS ou bateria.
+
+Esta é a versão local nova. A release anterior `consta-android-893bed7` ainda pede configuração de login e não contém esta mudança.
 
 O alvo é Android 8.0 ou superior, arm64. A base React Native/TypeScript também é compatível com iOS, cujo build requer macOS/Xcode. Não há site ou PWA substituindo o aplicativo.
 

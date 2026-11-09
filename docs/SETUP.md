@@ -4,7 +4,9 @@
 
 A versão **1.1.0**, `versionCode` 2, usa o pacote `app.consta.mobile`. Não requer conta online, credenciais OAuth, endereço de API ou banco de dados externo.
 
-**Novo APK offline em preparação.** A release anterior `consta-android-893bed7` ainda é o aplicativo com login pendente e não deve ser confundida com o novo build local. O link verificado será registrado ao concluir a compilação.
+**[Baixar o APK local 1.1.0](https://github.com/1kygg/Apk/releases/download/consta-offline-v1.1.0-746bd0d/consta-offline.apk)** · [checksum, certificado e relatórios](https://github.com/1kygg/Apk/releases/tag/consta-offline-v1.1.0-746bd0d). APK arm64 compilado e assinatura/pacote conferidos. O [fluxo de perfil e ponto foi verificado em emulador sem rede](https://github.com/1kygg/Apk/actions/runs/42608028196); o APK do teste é x86_64, com o mesmo código do aplicativo. Instalação arm64 e sensores físicos ainda não foram verificados.
+
+A release anterior `consta-android-893bed7` é a versão com login pendente; instale a nova versão local para criar o perfil sem servidor.
 
 Após instalar o APK local, abra o app e informe nome/apelido. A foto é opcional e usa o seletor do sistema. A imagem escolhida é redimensionada e copiada para o armazenamento privado do app, para continuar disponível depois de fechar o seletor. As preferências iniciais de treino são básicas e podem ser alteradas no Perfil.
 

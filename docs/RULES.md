@@ -1,60 +1,57 @@
-# Regras de treinos, atividades e desafios
+# Regras locais de treinos, atividades e pontuação
 
-## Treinos e constância
+## Perfil e primeira utilização
 
-Preferências de objetivo, experiência, dias, tempo, ambiente, equipamentos, modalidades e exercícios a evitar orientam a biblioteca. Em casa sem materiais cadastrados, a sugestão prioriza peso corporal. Histórico recente e descanso entram na seleção; variação não significa trocar tudo diariamente.
+O perfil é criado com nome ou apelido e foto opcional, sem conta online. As opções iniciais de treino são de iniciante, em casa, sem materiais, com tempo disponível inicialmente de 25 minutos e rotina pessoal às segundas, quartas e sextas. Essas preferências podem ser alteradas no Perfil; são organização de atividade, não avaliação ou prescrição médica.
 
-O plano é persistido por usuário/data/ambiente. Ao iniciar, a versão é preservada como snapshot da sessão. Substituições precisam ser compatíveis com ambiente, equipamentos e nível. Adaptações e redução de séries não reduzem pontos de constância. Outra sugestão no mesmo dia não cria nova oportunidade.
+Objetivo, experiência, dias, tempo, ambiente, equipamentos, modalidades, exercícios evitados e histórico recente orientam sugestões diárias. Em casa sem equipamentos, são priorizados movimentos com peso corporal. Recuperação e descanso fazem parte do planejamento; não há mensagem de culpa por não realizar atividade.
 
-Força é autodeclarada: sensores não comprovam séries, carga, repetições ou execução. O regulamento deve mostrar as condições de conclusão aceitas; não existe distância mínima universal. Descanso não gera mensagem de culpa.
+## Plano e execução
 
-## Calendário do desafio
+O treino do dia fica salvo por perfil, data local e ambiente. Reabrir a tela não sorteia uma ficha nova. Antes de iniciar, podem ser escolhidas alternativas compatíveis com ambiente, nível e materiais. A versão iniciada é preservada no histórico; adaptações e séries marcadas ficam separadas dela.
 
-- Início/encerramento são instantes; o fuso IANA do desafio determina a data local e o início da semana de pontuação.
-- O início da atividade deve estar em `[startsAt, endsAt)`; conclusão deve ocorrer até endsAt. Sessão iniciada antes do desafio ou terminada depois dele fica no histórico sem crédito.
-- O dia creditado é o **dia local de início** da sessão. Sem janela de horário, atravessar meia-noite não divide a atividade nem cria crédito no dia seguinte.
-- Quando há janela diária de horário, a sessão inteira precisa caber nela. Janelas noturnas são permitidas; essa regra é exibida no regulamento.
-- A sincronização deve chegar até encerramento + prazo de tolerância configurado, além de atender à política de horários verificáveis.
-- Agenda e lembretes pessoais não alteram nenhum desses limites. Viajar ou mudar o relógio do celular não modifica o fuso do desafio.
+Uma sessão iniciada não cria outra oportunidade apenas por trocar de ambiente ou reenviar a conclusão. Excluir uma atividade ligada a um treino mantém esse treino como registro encerrado, evitando recriá-lo para multiplicar pontos.
 
-Os dias válidos, dias de reposição, início da semana, limites diário/semanal, meta semanal, modalidades, fontes e critérios de empate são configurados por desafio. Sábado e domingo não têm significado fixo.
+Execução de força é **autodeclarada**: cronômetro, passos e GPS não comprovam séries, carga, repetições ou movimentos. Reduzir séries ou usar alternativa mais fácil não reduz o valor da constância.
 
-## Limites, reposições e máximo
+## Pontos pessoais
 
-Constância concede no máximo um crédito por pessoa e dia, no valor configurado por dia. O limite semanal também se aplica. A sugestão inicial é um ponto por dia e cinco por semana, mas o administrador pode ajustar antes do início.
+A aba Ranking mostra a evolução do próprio perfil neste celular. Não lista amigos inventados, não sincroniza celulares e não usa autenticação por servidor.
 
-Reposição recupera uma oportunidade de um dia regular anterior perdido **na mesma semana**. Ela não aumenta o limite semanal nem o máximo teórico do calendário. Dias regulares e de reposição não podem se sobrepor.
+Nas opções iniciais:
 
-O máximo é calculado sobre as oportunidades reais do período, com semanas incompletas e limites. Em constância, o crédito diário é limitado ao menor valor entre pontos por dia e teto diário. Em caminhada/corrida/ciclismo, os tetos são quilômetros; em passos, são passos. O máximo semanal é o menor entre as oportunidades regulares multiplicadas pelo teto diário e o teto semanal. A meta semanal configurada permanece fixa no desempate mesmo em semanas incompletas.
+- Um dia válido com pelo menos uma sessão concluída vale **1 ponto**.
+- Várias sessões no mesmo dia continuam valendo 1 ponto.
+- O limite é de **5 pontos por semana**, começando na segunda-feira.
+- Todos os dias da semana são válidos; não há sábado reservado a reposição nem domingo imposto como descanso.
+- Quilômetros, passos, dificuldade, carga e repetições não criam bônus de constância.
 
-## Rankings separados
+Em **Ajustar regras pessoais**, podem ser alterados dias válidos, primeiro dia da semana e limite semanal de 1 a 7 pontos. O valor de um dia permanece 1 ponto. Salvar novas regras **recalcula todo o histórico local**, com aviso na tela. Essas opções não são regulamento compartilhado de um grupo.
 
-Constância soma pontos; caminhada, corrida e ciclismo somam os quilômetros elegíveis da modalidade correspondente. Passos somam apenas registros aceitos conforme fonte e regulamento. As modalidades não são misturadas e passos não viram quilômetros GPS nem bônus de constância.
+O total do histórico soma os créditos de cada semana conforme as regras atuais. Atividades repetidas com o mesmo identificador não duplicam histórico ou pontos. Sessões ainda em andamento não pontuam. Excluir um registro recalcula o resultado; se outra sessão concluída no mesmo dia continuar salva, esse dia ainda poderá valer 1 ponto.
 
-Desempate sugerido: semanas em que a meta configurada foi atingida; persistindo, mesma posição. A opção de empate compartilhado direto também fica explícita. O ranking expõe atualização e motivo de exclusão do próprio registro, sem divulgar e-mails, trajeto ou dados detalhados dos colegas.
+## Datas e fontes
 
-## Offline e integridade
+A data de pontuação é o **dia local do início** da atividade, no fuso da rotina. Cruzar a meia-noite não divide a sessão nem cria crédito para dois dias. Relógio, fuso e horários são do aparelho: mudar essas informações pode afetar a pontuação. Não existe validação por servidor ou proteção absoluta contra manipulação.
 
-O servidor é a autoridade para pontos. Unicidade, chaves de idempotência e transações evitam duplicação por repetição ou concorrência. A mesma conclusão não ganha novos pontos ao reenviar ou mudar o treino sugerido.
+Uma sessão concluída deve ter intervalo coerente e tempo ativo compatível com a duração. Registros incompletos, inválidos ou no futuro não entram no cálculo atual. Atividades em casa, academia, cardio e esportes podem contribuir para constância, sem distância mínima universal.
 
-Horários declarados pelo aparelho não bastam para pontuar. Inícios/conclusões verificados pelo servidor usam hora do servidor; dados offline não verificáveis ficam preservados como inelegíveis ou pendentes de revisão conforme a política. Prazo de tolerância não transforma automaticamente um horário arbitrário em horário confiável. Revisão administrativa requer motivo e auditoria.
+GPS, manual e autodeclarado são origens distintas. Esteira e bicicleta ergométrica recebem duração e distância informadas pela pessoa; não são quilômetros medidos por GPS. Futebol, basquete e vôlei podem ser registrados somente por modalidade e duração.
 
-Registros manuais, GPS e importados são fontes distintas; uma fonte descrita no regulamento não prova que sua integração esteja disponível. Esta versão não importa dados de Health Connect/HealthKit. Anomalias de GPS geram indicação para revisão, não acusação automática. Não há proteção absoluta contra fraude.
+## Quilômetros, passos e percurso
 
-Uma atividade pode estar salva localmente, aguardando sincronização, confirmada pelo servidor e ainda assim inelegível para o desafio. O histórico pessoal não é apagado por falta de pontos.
+Caminhada, corrida e ciclismo têm totais separados; quilômetros das modalidades não são misturados. O total informa registros de suas fontes, incluindo manuais identificados no histórico. GPS sinalizado com anomalias não contribui aos totais de quilômetros mostrados, mas uma conclusão autodeclarada continua no histórico de constância. Anomalia é um sinal de qualidade, não uma acusação.
 
-## Alterações e exclusão
+Posições imprecisas, saltos, horários fora de ordem e velocidades implausíveis são filtrados. Pausas e perda de sinal quebram segmentos. Nenhuma reta deve ligar o deslocamento feito durante uma pausa ou período sem posições válidas.
 
-Antes do início, configurações podem ser editadas livremente. Após o início, alteração precisa de motivo, auditoria, comunicação e confirmação explícita do recálculo. O resultado não muda silenciosamente.
+Ritmo e velocidade usam **tempo ativo**, sem pausas; o tempo total é apresentado separadamente. O traçado em SVG mostra os pontos reais de forma relativa e offline. Não é mapa de ruas nem método alternativo de cálculo de quilômetros.
 
-Excluir ou corrigir uma atividade exige recalcular os resultados relacionados de forma consistente. Duplicar um desafio copia configurações, mas exige novas datas; encerrar um desafio não encerra o aplicativo.
+Passos são opcionais em caminhada/corrida. Não comprovam treino de força, não aparecem como métrica de ciclismo, não viram quilômetros GPS nem bônus de pontos. O app distingue sessão, total diário disponível e contagem parcial. Não há importação de Health Connect/HealthKit ou relógio.
 
-## GPS e métricas
+## Persistência e limitações
 
-São filtradas posições sem qualidade suficiente, horários fora de ordem, saltos e velocidades incompatíveis com a modalidade. Lacunas e pausas interrompem segmentos: não se soma uma linha atravessando um período sem dados. O trajeto pode ter partes sem registro, e isso permanece visível.
+Registros e conclusões são gravados localmente e operações repetidas usam identificadores estáveis. Uma falha de gravação precisa aparecer como erro; não deve virar confirmação falsa. O app tenta preservar progresso em interrupções, sem inventar distância ou tempo ativo do período perdido.
 
-Ritmo e velocidade usam **tempo ativo**, excluindo pausas; tempo total é mostrado separadamente. Esteira, bicicleta ergométrica e esportes podem ser registrados manualmente, com origem explícita. Distância manual não é apresentada como GPS.
+Internet não é requisito para concluir ou registrar pontos. Permissões, localização ativada e sinal ainda são necessários para GPS. Fechamento forçado pode interromper captura; a retomada exige revisar o estado recuperado.
 
-## Limite de processamento
-
-Datas, duração e limites de pontuação são definidos por desafio. O calendário materializado tem uma proteção técnica de 100.000 dias por intervalo para impedir requisições que consumam memória e CPU enumerando milênios de datas. Intervalos maiores são rejeitados antes da enumeração, com erro de configuração; essa proteção não define a duração usual ou a pontuação de uma competição.
+As antigas regras de desafios compartilhados, auditoria e autoridade do servidor estão preservadas somente como referência em [RULES_ONLINE_LEGACY.md](RULES_ONLINE_LEGACY.md). Elas não são regras operacionais do perfil local 1.1.0.

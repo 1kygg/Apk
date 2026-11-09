@@ -120,10 +120,6 @@ jobs:
       CI: 'true'
       EXPO_NO_TELEMETRY: '1'
       ANDROID_ABIS: arm64-v8a
-      EXPO_PUBLIC_API_URL: ${{ vars.CONSTA_API_URL }}
-      EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ vars.CONSTA_GOOGLE_WEB_CLIENT_ID }}
-      EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: ${{ vars.CONSTA_GOOGLE_IOS_CLIENT_ID }}
-      EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY: ${{ vars.CONSTA_GOOGLE_MAPS_ANDROID_KEY }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -148,7 +144,7 @@ jobs:
       - name: Guardar APK, checksum e certificado público
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: consta-android-internal-${{ github.run_number }}
+          name: consta-offline-android-${{ github.run_number }}
           path: artifacts/android/
           if-no-files-found: error
           retention-days: 1
@@ -159,6 +155,6 @@ jobs:
             echo "## APK nativo para teste interno"
             echo "Arquitetura: arm64-v8a; build release; assinatura de desenvolvimento."
             echo "O artifact inclui SHA256 e impressão pública do certificado, nunca a chave privada."
-            echo "Sem configuração OAuth/API, a interface informa indisponibilidade de login."
+            echo "Perfil local, treinos, histórico e pontos funcionam sem servidor, OAuth ou internet."
             echo "Este build não comprova GPS, OAuth ou 60 FPS em aparelho real."
           } >> "$GITHUB_STEP_SUMMARY"

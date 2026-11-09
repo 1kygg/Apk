@@ -11,16 +11,16 @@ describe('fila local de treinos autodeclarados',()=>{
   await Promise.all([saveDraft(draft()),saveDraft({...draft(),notes:'Atualizado'}),saveDraft(draft('owner-b'))]);
   const items=await loadDrafts();expect(items).toHaveLength(2);expect(items.find(x=>x.userId==='owner-a')?.notes).toBe('Atualizado');
  });
- it('sincroniza somente a conta solicitada e fixa seu identificador em cada requisição',async()=>{
+ it('consolida somente o perfil solicitado e fixa seu identificador em cada requisição',async()=>{
   await saveDraft(draft());await saveDraft(draft('owner-b','plan-b'));
   expect(await syncTrainingDrafts('owner-a')).toBe(1);
   expect(mocks.request).toHaveBeenCalledTimes(2);
   for(const call of mocks.request.mock.calls)expect(call[1].expectedUserId).toBe('owner-a');
   expect(await loadDrafts()).toEqual([draft('owner-b','plan-b')]);
  });
- it('preserva a conclusão local quando o servidor falha e permite reenvio sem duplicar a sessão',async()=>{
-  await saveDraft(draft());mocks.request.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('offline'));
-  await expect(syncTrainingDrafts('owner-a')).rejects.toThrow('offline');expect(await loadDrafts()).toHaveLength(1);
+ it('preserva a conclusão local quando a gravação falha e permite reenvio sem duplicar a sessão',async()=>{
+  await saveDraft(draft());mocks.request.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('storage failed'));
+  await expect(syncTrainingDrafts('owner-a')).rejects.toThrow('storage failed');expect(await loadDrafts()).toHaveLength(1);
   mocks.request.mockResolvedValue({});expect(await syncTrainingDrafts('owner-a')).toBe(1);expect(await loadDrafts()).toHaveLength(0);
   expect(mocks.request.mock.calls.filter(x=>String(x[0]).endsWith('/finish')).map(x=>x[0])).toEqual(['/plans/plan-a/finish','/plans/plan-a/finish']);
  });
@@ -29,10 +29,10 @@ describe('fila local de treinos autodeclarados',()=>{
  });
 });
 
-it('separa a conclusão online imediata de sincronizações tardias sem trocar a data original',async()=>{
+it('preserva o horário original da conclusão tanto imediata quanto recuperada',async()=>{
  mocks.memory.clear();mocks.request.mockReset().mockResolvedValue({});
  await saveDraft(draft());await syncTrainingDrafts('owner-a','plan-a');
- expect(mocks.request.mock.calls.find(x=>String(x[0]).endsWith('/finish'))?.[1].body).toMatchObject({endedAt:'2026-11-08T10:10:20Z',completedOffline:false});
+ expect(mocks.request.mock.calls.find(x=>String(x[0]).endsWith('/finish'))?.[1].body).toMatchObject({endedAt:'2026-11-08T10:10:20Z'});
  mocks.request.mockClear();await saveDraft(draft());await syncTrainingDrafts('owner-a');
- expect(mocks.request.mock.calls.find(x=>String(x[0]).endsWith('/finish'))?.[1].body).toMatchObject({endedAt:'2026-11-08T10:10:20Z',completedOffline:true});
+ expect(mocks.request.mock.calls.find(x=>String(x[0]).endsWith('/finish'))?.[1].body).toMatchObject({endedAt:'2026-11-08T10:10:20Z'});
 });

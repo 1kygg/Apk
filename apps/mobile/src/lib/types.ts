@@ -3,8 +3,8 @@ export type Modality = CardioModality | 'strength' | 'football' | 'basketball' |
 export type Environment = 'home' | 'gym' | 'outdoor';
 export type ActivitySource = 'gps' | 'manual' | 'self_reported';
 export interface User { id: string; displayName: string; avatarUrl?: string | null }
-export interface Session { accessToken: string; user: User; offline?: boolean }
-export type SyncStatus = 'device_only' | 'pending' | 'server_confirmed' | 'ineligible';
+export interface Session { user: User; local: true }
+export type SyncStatus = 'device_only' | 'pending' | 'server_confirmed' | 'ineligible' | 'local_saved';
 export interface RoutePoint {
   latitude: number;
   longitude: number;

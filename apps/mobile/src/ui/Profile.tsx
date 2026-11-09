@@ -1,50 +1,130 @@
-import React,{useEffect,useState} from 'react';
-import {Image,View} from 'react-native';
+import React, {useEffect, useState} from 'react';
+import {Image} from 'react-native';
+import {deleteAccount} from '../lib/auth';
+import {openPrivacySettings, pickAvatar} from '../lib/device';
+import {cancelReminders, scheduleReminders} from '../lib/notifications';
 import {useAccountApi} from './accountApi';
-import {logout,deleteAccount} from '../lib/auth';
-import {pickAvatar,openPrivacySettings} from '../lib/device';
-import {cancelReminders,scheduleReminders} from '../lib/notifications';
-import {configuration} from '../lib/config';
-import {Button,Choice,Field,Loading,Notice,Row,Screen,Section,Sheet,Txt,confirmAction,useAction,useResource,useTheme} from './components';
+import {Button, Choice, Field, Loading, Notice, Row, Screen, Section, Sheet, Txt, confirmAction, useAction, useResource, useTheme} from './components';
 import {PreferencesForm} from './Preferences';
-import {days,Preferences} from './types';
-import {Notifications} from './Ranking';
-import {removeDraft,loadDrafts} from './trainingStore';
+import {days, type Preferences} from './types';
 
-type Me={id:string;displayName:string;avatarUrl?:string;onboardingComplete?:boolean};
-type Reminder={enabled:boolean;days:number[];hour:number;minute:number;quietStartMinute:number;quietEndMinute:number};
-function toClock(n:number){return String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0');}
-function toMinute(v:string){if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(v))throw new Error('Use horário no formato HH:mm, por exemplo 08:30.');const [h,m]=v.split(':').map(Number);return h*60+m;}
-export function Profile({onPreferencesChanged}:{onPreferencesChanged:()=>void}){
- const api=useAccountApi();
- const profile=useResource<Me>('/me'),preferences=useResource<Preferences>('/me/preferences'),reminders=useResource<Reminder>('/me/notifications');
- const [editPreferences,setEditPreferences]=useState(false),[displayName,setDisplayName]=useState(''),[reminderEnabled,setReminderEnabled]=useState(false),[reminderDays,setReminderDays]=useState<number[]>([]),[time,setTime]=useState('08:00'),[quietStart,setQuietStart]=useState('22:00'),[quietEnd,setQuietEnd]=useState('07:00'),[privacy,setPrivacy]=useState(false),[feedback,setFeedback]=useState<string|null>(null);
- const action=useAction(),theme=useTheme();
- useEffect(()=>{if(profile.data)setDisplayName(profile.data.displayName);},[profile.data?.displayName]);
- useEffect(()=>{if(reminders.data){const r=reminders.data;setReminderEnabled(r.enabled);setReminderDays(r.days);setTime(toClock(r.hour*60+r.minute));setQuietStart(toClock(r.quietStartMinute));setQuietEnd(toClock(r.quietEndMinute));}},[reminders.data]);
- async function saveName(){await action.run(async()=>{if(displayName.trim().length<2)throw new Error('Use um nome de exibição com pelo menos 2 caracteres.');await api('/me',{method:'PATCH',body:{displayName:displayName.trim()}});await profile.reload();setFeedback('Nome atualizado. Seu e-mail não aparece aos participantes.');});}
- async function avatar(){await action.run(async()=>{const url=await pickAvatar();if(url){await profile.reload();setFeedback('Avatar atualizado.');}});}
- async function saveReminders(){await action.run(async()=>{const minute=toMinute(time),start=toMinute(quietStart),end=toMinute(quietEnd);if(reminderEnabled&&!reminderDays.length)throw new Error('Escolha ao menos um dia para os lembretes.');if(reminderEnabled)await scheduleReminders({enabled:true,days:reminderDays,hour:Math.floor(minute/60),minute:minute%60,quietStart,quietEnd});else await cancelReminders();await api('/me/notifications',{method:'PATCH',body:{enabled:reminderEnabled,days:reminderDays,hour:Math.floor(minute/60),minute:minute%60,quietStartMinute:start,quietEndMinute:end}});setFeedback(reminderEnabled?'Lembretes locais salvos neste aparelho.':'Lembretes desativados neste aparelho.');});}
- function removeAccount(){confirmAction('Excluir sua conta e seus dados?','O servidor excluirá perfil, atividades e dados associados. Não é possível desfazer. Dados locais deste aparelho também serão removidos.',async()=>{await action.run(async()=>{const id=profile.data?.id;await deleteAccount();if(id)for(const d of await loadDrafts())if(d.userId===id)await removeDraft(d.planId,id);});},true);}
- if(editPreferences&&preferences.data)return <PreferencesForm initial={preferences.data} onBack={()=>setEditPreferences(false)} onSaved={()=>{setEditPreferences(false);void preferences.reload();onPreferencesChanged();}}/>;
- return <Screen title="Perfil" subtitle="Sua conta, seu ritmo e sua privacidade." onRefresh={async()=>{await Promise.all([profile.reload(),preferences.reload(),reminders.reload()]);}} refreshing={profile.loading}>
-  {profile.loading?<Loading/>:profile.error?<Notice error>{profile.error}</Notice>:<>
-   {profile.data?.avatarUrl&&<Image source={{uri:profile.data.avatarUrl}} accessibilityLabel="Seu avatar" style={{width:80,height:80,borderRadius:40}}/>}
-   <Field label="Nome de exibição" value={displayName} onChangeText={setDisplayName}/><Button title="Salvar nome" variant="quiet" onPress={saveName} busy={action.busy}/><Button title="Escolher avatar pelo seletor do sistema" variant="quiet" onPress={avatar} busy={action.busy}/>
-  </>}
-  <Section title="Treinos e agenda pessoal">{preferences.error&&<Notice error>{preferences.error}</Notice>}<Button title="Atualizar preferências e exercícios evitados" variant="quiet" disabled={!preferences.data} onPress={()=>setEditPreferences(true)}/><Txt muted>A agenda pessoal organiza sugestões e lembretes. Ela não muda o calendário nem a pontuação dos desafios do grupo.</Txt></Section>
-  <Section title="Lembretes deste aparelho">{reminders.loading?<Loading/>:reminders.error?<Notice error>{reminders.error}</Notice>:null}<Choice title="Ativar lembretes" selected={reminderEnabled} onPress={()=>setReminderEnabled(v=>!v)}/><Row>{days.map((d,i)=><Choice key={d} title={d} selected={reminderDays.includes(i+1)} onPress={()=>setReminderDays(a=>a.includes(i+1)?a.filter(x=>x!==i+1):[...a,i+1])}/>)}</Row><Field label="Horário preferido (HH:mm)" value={time} onChangeText={setTime} keyboardType="numbers-and-punctuation"/><Field label="Início do silêncio (HH:mm)" value={quietStart} onChangeText={setQuietStart} keyboardType="numbers-and-punctuation"/><Field label="Fim do silêncio (HH:mm)" value={quietEnd} onChangeText={setQuietEnd} keyboardType="numbers-and-punctuation"/><Button title="Salvar lembretes" variant="quiet" onPress={saveReminders} busy={action.busy}/><Txt muted>Permissão de notificações só é solicitada ao ativar. Nenhuma mensagem de culpa ou cobrança é enviada.</Txt></Section>
-  <Section title="Aparência"><Choice title="Tema claro" selected={theme.isLight} onPress={theme.toggle}/><Txt muted>O aplicativo respeita a escala de fontes do sistema e usa transições discretas sem animações obrigatórias.</Txt></Section>
-  <Section title="Integrações e permissões"><Txt>Google: {configuration.googleConfigured?'configuração informada':'configuração externa pendente'}</Txt><Txt muted>Passos são opcionais, consultados na tela Atividades. A origem e a disponibilidade aparecem após a consulta nativa. Não há necessidade de smartwatch.</Txt><Button title="Gerenciar permissões nas configurações" variant="quiet" onPress={()=>action.run(openPrivacySettings)}/><Button title="Consultar privacidade e revogação" variant="quiet" onPress={()=>setPrivacy(true)}/></Section>
-  <Notifications/>
-  {feedback&&<Notice>{feedback}</Notice>}{action.error&&<Notice error>{action.error}</Notice>}
-  <Button title="Sair da conta" variant="quiet" busy={action.busy} onPress={()=>confirmAction('Sair da conta?','Registros pendentes ficam vinculados à sua conta neste aparelho. Sincronize as atividades importantes antes de sair.',async()=>{await action.run(logout);})}/>
-  <Button title="Excluir conta e dados" variant="danger" onPress={removeAccount} busy={action.busy}/>
-  <Sheet title="Privacidade e permissões" visible={privacy} onClose={()=>setPrivacy(false)}>
-   <Section title="Dados privados por padrão"><Txt>Trajetos e dados detalhados de saúde não são publicados nos grupos. Compartilhar quilômetros no ranking não compartilha seu percurso.</Txt><Txt>O compartilhamento é opcional. Quando você incluir um percurso local, poderá ocultar o início e o fim. Isso reduz exposição, sem garantir anonimato.</Txt></Section>
-   <Section title="Você controla as permissões"><Txt>Localização é usada apenas no registro de percurso iniciado por você. A permissão de segundo plano é solicitada somente se você ativar a continuidade com a tela bloqueada.</Txt><Txt>Passos e atividade física são opcionais. Negar ou revogar acesso não impede treinos, grupos ou registros manuais.</Txt><Txt>Notificações podem ser desativadas aqui e nas configurações do sistema. Para interromper o uso de passos, desative a opção antes da sessão e revogue a permissão de atividade física/saúde no sistema.</Txt><Txt>O avatar usa o seletor de fotos do sistema. Câmera, microfone, contatos e fotos de comprovação não são exigidos.</Txt><Button title="Abrir configurações de permissões" variant="quiet" onPress={()=>action.run(openPrivacySettings)}/></Section>
-   <Section title="Excluir e sincronizar"><Txt>Você pode excluir atividades no histórico e a conta nesta tela. A exclusão recalcula resultados no servidor. Registros offline ficam pendentes até haver conexão; eles podem ser preservados no histórico e inelegíveis para pontuação quando o horário não puder ser validado.</Txt><Txt>O mapa pode depender de internet ou cache. O fechamento forçado do aplicativo pode interromper o GPS; dados do período perdido não são inventados.</Txt></Section>
-   <Section title="Uso dos dados"><Txt>Dados de saúde não são usados para publicidade. O app não registra tokens ou trajetos em logs de diagnóstico. Os dados enviados ao servidor são limitados ao necessário para histórico, autenticação e classificação.</Txt></Section>
-  </Sheet>
- </Screen>;
+type LocalProfile = {id: string; displayName: string; avatarUrl?: string | null};
+type Reminder = {enabled: boolean; days: number[]; hour: number; minute: number; quietStartMinute: number; quietEndMinute: number};
+function toClock(minutes: number): string {
+  return String(Math.floor(minutes / 60)).padStart(2, '0') + ':' + String(minutes % 60).padStart(2, '0');
+}
+function toMinute(value: string): number {
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) throw new Error('Use um horário no formato HH:mm, por exemplo 08:30.');
+  const [hour, minute] = value.split(':').map(Number);
+  return hour * 60 + minute;
+}
+export function Profile({onPreferencesChanged}: {onPreferencesChanged: () => void}) {
+  const api = useAccountApi();
+  const profile = useResource<LocalProfile>('/me');
+  const preferences = useResource<Preferences>('/me/preferences');
+  const reminders = useResource<Reminder>('/me/notifications');
+  const [editPreferences, setEditPreferences] = useState(false);
+  const [displayName, setDisplayName] = useState('');
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderDays, setReminderDays] = useState<number[]>([]);
+  const [time, setTime] = useState('08:00');
+  const [quietStart, setQuietStart] = useState('22:00');
+  const [quietEnd, setQuietEnd] = useState('07:00');
+  const [privacy, setPrivacy] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const action = useAction();
+  const theme = useTheme();
+  useEffect(() => { if (profile.data) setDisplayName(profile.data.displayName); }, [profile.data?.displayName]);
+  useEffect(() => {
+    if (!reminders.data) return;
+    const value = reminders.data;
+    setReminderEnabled(value.enabled); setReminderDays(value.days);
+    setTime(toClock(value.hour * 60 + value.minute));
+    setQuietStart(toClock(value.quietStartMinute)); setQuietEnd(toClock(value.quietEndMinute));
+  }, [reminders.data]);
+  async function saveName() {
+    await action.run(async () => {
+      const name = displayName.trim();
+      if (!name || name.length > 80) throw new Error('Use um nome entre 1 e 80 caracteres.');
+      await api('/me', {method: 'PATCH', body: {displayName: name}});
+      await profile.reload(); setFeedback('Seu nome foi salvo neste aparelho.');
+    });
+  }
+  async function avatar() {
+    await action.run(async () => {
+      const uri = await pickAvatar(); if (!uri) return;
+      await profile.reload(); setFeedback('Sua foto foi salva neste aparelho.');
+    });
+  }
+  async function saveReminders() {
+    await action.run(async () => {
+      const minute = toMinute(time), start = toMinute(quietStart), end = toMinute(quietEnd);
+      if (reminderEnabled && !reminderDays.length) throw new Error('Escolha ao menos um dia para os lembretes.');
+      if (reminderEnabled) await scheduleReminders({enabled: true, days: reminderDays, hour: Math.floor(minute / 60), minute: minute % 60, quietStart, quietEnd});
+      else await cancelReminders();
+      await api('/me/notifications', {method: 'PATCH', body: {enabled: reminderEnabled, days: reminderDays, hour: Math.floor(minute / 60), minute: minute % 60, quietStartMinute: start, quietEndMinute: end}});
+      setFeedback(reminderEnabled ? 'Lembretes locais salvos. Eles funcionam sem internet.' : 'Lembretes desativados neste aparelho.');
+    });
+  }
+  function removeProfile() {
+    confirmAction('Apagar perfil e dados deste aparelho?', 'Seu nome, foto do perfil, pontos, treinos, atividades, trajetos e lembretes locais serão apagados. Não há recuperação pelo Consta depois de confirmar.', async () => { await action.run(deleteAccount); }, true);
+  }
+  if (editPreferences && preferences.data) return <PreferencesForm initial={preferences.data} onBack={() => setEditPreferences(false)} onSaved={() => {setEditPreferences(false); void preferences.reload(); onPreferencesChanged();}}/>;
+  return <Screen title="Perfil local" subtitle="Seu nome, sua foto e seu ritmo neste aparelho." onRefresh={async () => {await Promise.all([profile.reload(), preferences.reload(), reminders.reload()]);}} refreshing={profile.loading}>
+    <Notice>Sem login e sem servidor. Seus registros e pontos ficam neste celular.</Notice>
+    {profile.loading ? <Loading/> : profile.error ? <Notice error>{profile.error}</Notice> : <>
+      {profile.data?.avatarUrl && <Image accessible source={{uri: profile.data.avatarUrl}} accessibilityLabel="Sua foto de perfil" style={{width: 88, height: 88, borderRadius: 44}}/>}
+      <Field label="Nome de exibição" value={displayName} onChangeText={setDisplayName} maxLength={80}/>
+      <Button title="Salvar nome" variant="quiet" onPress={saveName} busy={action.busy}/>
+      <Button title="Escolher foto de perfil" variant="quiet" onPress={avatar} busy={action.busy}/>
+    </>}
+    <Section title="Treinos e rotina pessoal">
+      {preferences.error && <Notice error>{preferences.error}</Notice>}
+      <Button title="Atualizar preferências e exercícios evitados" variant="quiet" disabled={!preferences.data} onPress={() => setEditPreferences(true)}/>
+      <Txt muted>Suas preferências organizam as sugestões de treino. Lembretes são pessoais; alterar um horário de aviso não gera pontos.</Txt>
+    </Section>
+    <Section title="Lembretes deste aparelho">
+      {reminders.loading ? <Loading/> : reminders.error ? <Notice error>{reminders.error}</Notice> : null}
+      <Choice title="Ativar lembretes" selected={reminderEnabled} onPress={() => setReminderEnabled(value => !value)}/>
+      <Row>{days.map((day, index) => <Choice key={day} title={day} selected={reminderDays.includes(index + 1)} onPress={() => setReminderDays(values => values.includes(index + 1) ? values.filter(value => value !== index + 1) : [...values, index + 1])}/>)}</Row>
+      <Field label="Horário preferido (HH:mm)" value={time} onChangeText={setTime} keyboardType="numbers-and-punctuation"/>
+      <Field label="Início do silêncio (HH:mm)" value={quietStart} onChangeText={setQuietStart} keyboardType="numbers-and-punctuation"/>
+      <Field label="Fim do silêncio (HH:mm)" value={quietEnd} onChangeText={setQuietEnd} keyboardType="numbers-and-punctuation"/>
+      <Button title="Salvar lembretes" variant="quiet" onPress={saveReminders} busy={action.busy}/>
+      <Txt muted>A permissão de notificações é solicitada somente ao ativar. Você pode continuar usando o app sem permitir os avisos.</Txt>
+    </Section>
+    <Section title="Aparência">
+      <Choice title="Tema claro" selected={theme.isLight} onPress={theme.toggle}/>
+      <Txt muted>O texto acompanha o tamanho de fonte do sistema. As transições são discretas.</Txt>
+    </Section>
+    <Section title="Internet e permissões">
+      <Txt>Perfil, treinos, histórico e pontuação pessoal funcionam sem internet. O GPS pode registrar distância quando houver sinal de localização.</Txt>
+      <Txt muted>O mapa pode depender de conexão ou cache. Sem servidor, não há ranking sincronizado entre celulares.</Txt>
+      <Txt muted>Passos são opcionais e a disponibilidade aparece na tela Atividades. Não é necessário ter smartwatch.</Txt>
+      <Button title="Gerenciar permissões no aparelho" variant="quiet" onPress={() => action.run(openPrivacySettings)}/>
+      <Button title="Consultar privacidade" variant="quiet" onPress={() => setPrivacy(true)}/>
+    </Section>
+    {feedback && <Notice>{feedback}</Notice>}{action.error && <Notice error>{action.error}</Notice>}
+    <Button title="Apagar perfil e dados deste aparelho" variant="danger" onPress={removeProfile} busy={action.busy}/>
+    <Sheet title="Privacidade neste aparelho" visible={privacy} onClose={() => setPrivacy(false)}>
+      <Section title="Armazenamento local">
+        <Txt>Esta versão não tem conta online nem servidor de sincronização. Perfil, pontos, observações e histórico são guardados neste celular.</Txt>
+        <Txt>Não há backup ou recuperação de dados pelo Consta. Apagar os dados do aplicativo ou desinstalá-lo pode remover seus registros. Backups do sistema dependem das configurações do aparelho.</Txt>
+      </Section>
+      <Section title="Você controla as permissões">
+        <Txt>Localização é usada no registro de percurso iniciado por você. Passos, notificações e a foto de perfil são opcionais.</Txt>
+        <Txt>A foto é escolhida pelo seletor do sistema. Câmera, microfone, contatos ou fotos de comprovação não são exigidos para pontuar.</Txt>
+        <Button title="Abrir configurações de permissões" variant="quiet" onPress={() => action.run(openPrivacySettings)}/>
+      </Section>
+      <Section title="Trajetos e compartilhamento">
+        <Txt>O mapa, quando disponível, pode consultar um provedor pela internet. O registro GPS pode continuar sem internet, mas depende do sinal e das permissões do aparelho.</Txt>
+        <Txt>Compartilhar um resumo ou arquivo de percurso é uma escolha sua. Ocultar início e fim reduz exposição, sem garantir anonimato.</Txt>
+        <Txt>Fechar o aplicativo à força pode interromper o registro. O período perdido não recebe posições inventadas.</Txt>
+      </Section>
+      <Section title="Pontuação pessoal">
+        <Txt>Os pontos são calculados neste aparelho com as datas registradas nele. Conclusões de treinos são autodeclaradas; GPS e cronômetros não comprovam fisicamente exercícios.</Txt>
+        <Txt>Você pode excluir atividades no histórico. A pontuação local é recalculada com os registros restantes.</Txt>
+      </Section>
+    </Sheet>
+  </Screen>;
 }

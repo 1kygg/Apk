@@ -1,14 +1,10 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
-const iosGoogleId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
-const googleScheme = iosGoogleId?.endsWith('.apps.googleusercontent.com')
-  ? 'com.googleusercontent.apps.' + iosGoogleId.replace('.apps.googleusercontent.com', '')
-  : undefined;
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'Consta',
   slug: 'consta',
   icon: './assets/icon.png',
-  version: '1.0.0',
+  version: '1.1.0',
   orientation: 'portrait',
   scheme: 'consta',
   userInterfaceStyle: 'automatic',
@@ -16,7 +12,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     bundleIdentifier: 'app.consta.mobile',
     supportsTablet: true,
-    usesAppleSignIn: true,
     infoPlist: {
       NSMotionUsageDescription: 'Permite contar passos apenas quando você ativar esta função no cardio.',
       ITSAppUsesNonExemptEncryption: false,
@@ -24,7 +19,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: 'app.consta.mobile',
-    versionCode: 1,
+    versionCode: 2,
     allowBackup: false,
     adaptiveIcon: { foregroundImage: './assets/adaptive-icon.png', backgroundColor: '#0D0F0E' },
     edgeToEdgeEnabled: true,
@@ -40,15 +35,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'android.permission.WRITE_EXTERNAL_STORAGE',
       'android.permission.ACCESS_BACKGROUND_LOCATION',
     ],
-    config: process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY
-      ? { googleMaps: { apiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_KEY } }
-      : undefined,
-    intentFilters: [{
-      action: 'VIEW',
-      autoVerify: false,
-      data: [{ scheme: 'consta', host: 'invite' }],
-      category: ['BROWSABLE', 'DEFAULT'],
-    }],
+
   },
   plugins: [
     ['expo-build-properties', {
@@ -56,7 +43,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         minSdkVersion: 26,
         compileSdkVersion: 36,
         targetSdkVersion: 36,
-        usesCleartextTraffic: process.env.CONSTA_ALLOW_CLEARTEXT === 'true',
+        usesCleartextTraffic: false,
       },
       ios: { deploymentTarget: '15.1' },
     }],
@@ -73,8 +60,5 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       cameraPermission: false,
       microphonePermission: false,
     }],
-    ['expo-secure-store', { configureAndroidBackup: true }],
-    'expo-apple-authentication',
-    ...(googleScheme ? [['@react-native-google-signin/google-signin', { iosUrlScheme: googleScheme }] as [string, Record<string, string>]] : []),
   ],
 });

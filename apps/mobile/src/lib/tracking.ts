@@ -1,12 +1,11 @@
 import { AppState, Platform } from 'react-native';
-import NetInfo from '@react-native-community/netinfo';
 import * as Crypto from 'expo-crypto';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { GpsFilter } from '@consta/domain';
 import { api, ApiError } from './api';
 import {completionPayload,importPayload} from './activity-payload';
-import { getSession, registerSessionCleanup } from './auth';
+import { registerSessionCleanup } from './auth';
 import { advanceRecordingClock,addActivityAnomaly } from './recording-model';
 import { AccountScopeError,getAccountScope,captureAccountScope,assertAccountScope,type AccountScope } from './account-scope';
 import { startSessionSteps } from './steps';
@@ -33,7 +32,6 @@ let initialized = false;
 let initializedScope:AccountScope|null=null;
 let syncAccount:AccountScope|null=null;
 let removeAppState: (()=>void) | null = null;
-let removeNetwork: (()=>void) | null = null;
 let lastError: string | null = null;
 let syncing = false;
 const subscribers = new Set<(state: TrackerState) => void>();
@@ -135,7 +133,7 @@ async function acceptLocations(locations:Location.LocationObject[],scope:Account
     if(location.timestamp<(current.captureStartedAt??Date.parse(current.startedAt)))continue;
     if(location.mocked){
       current=addActivityAnomaly(current,'mock_location');
-      current.eligibilityReason='Localização marcada pelo sistema como simulada; atividade pode precisar de revisão.';
+      current.eligibilityReason='Localização marcada pelo aparelho como simulada. O registro preserva esse aviso.';
     }
     const point={latitude:location.coords.latitude,longitude:location.coords.longitude,accuracy:location.coords.accuracy??Number.POSITIVE_INFINITY,timestamp:location.timestamp};
     const result=filter.push(point,Date.now());
@@ -258,9 +256,14 @@ export async function initializeTracking():Promise<void>{
   if(initialized&&initializedScope?.userId===scope.userId&&initializedScope.epoch===scope.epoch)return;
   const userId=scope.userId;
   initialized=true;initializedScope=scope;
-  await locked(async()=>{
+  try{await locked(async()=>{
     assertAccountScope(scope);
-    const id=await getActiveId(scope.userId);assertAccountScope(scope);
+    let id=await getActiveId(scope.userId);assertAccountScope(scope);
+    if(!id){
+      const saved=await readActivities(userId);assertAccountScope(scope);
+      id=saved.find(a=>['recording','paused','interrupted','review'].includes(a.status))?.clientId??null;
+      if(id)await setActiveId(id,userId);
+    }
     if(id){
       const existing=await readActivity(id,userId);assertAccountScope(scope);
       if(existing){
@@ -276,7 +279,14 @@ export async function initializeTracking():Promise<void>{
       }
     }
     emit();ensureTimer();
-  });
+  });}catch(error){
+    if(initializedScope?.userId===scope.userId&&initializedScope.epoch===scope.epoch){
+      await stopNativeLocation();current=null;route=[];filter=null;initialized=false;initializedScope=null;
+      if(timer){clearInterval(timer);timer=null;}
+      emit();
+    }
+    throw error;
+  }
   const appStateSubscription=AppState.addEventListener('change',state=>{
     void locked(async()=>{
       assertAccountScope(scope);
@@ -303,9 +313,6 @@ export async function initializeTracking():Promise<void>{
     }).catch(handleLocalError);
   });
   removeAppState=()=>appStateSubscription.remove();
-  removeNetwork=NetInfo.addEventListener(state=>{
-    if(state.isConnected&&getAccountScope()?.userId===scope.userId)void syncPendingActivities().catch(()=>{});
-  });
 }
 export async function startCardio(modality:CardioModality,options:{background?:boolean;steps?:boolean}={}):Promise<LocalActivity>{
   return scopedLocked(async scope=>{
@@ -315,20 +322,20 @@ export async function startCardio(modality:CardioModality,options:{background?:b
     lastError=null;route=[];filter=new GpsFilter(modality);
     current=freshActivity(modality,'gps','outdoor');
     current.stepsEnabled=!!options.steps&&modality!=='cycling';
-    const network=await NetInfo.fetch();
-    if(network.isConnected){
-      try{
-        const start=await api<{id:string;startedAt:string;serverTime?:string}>('activities/start',{method:'POST',expectedUserId:scope.userId,expectedSessionEpoch:scope.epoch,body:{clientId:current.clientId,modality,source:'gps',environment:'outdoor'}});
-        assertAccountScope(scope);current.serverId=start.id;current.startedAt=start.startedAt;
-      }catch(error){
-        if(!(error instanceof ApiError)||!['NETWORK_ERROR','CONFIGURATION_REQUIRED'].includes(error.code)){current=null;throw error;}
-        current.eligibilityReason='Iniciada sem confirmação do servidor. Será preservada no histórico e poderá precisar de revisão para pontuar.';
-      }
-    }else current.eligibilityReason='Iniciada offline. Horário não validado para pontuação; histórico será preservado.';
+    try{
+      const start=await api<{id:string;startedAt:string}>('activities/start',{
+        method:'POST',expectedUserId:scope.userId,expectedSessionEpoch:scope.epoch,
+        body:{clientId:current.clientId,modality,source:'gps',environment:'outdoor'},
+      });
+      assertAccountScope(scope);current.serverId=start.id;
+      current.startedAt=start.startedAt;
+      current.eligibilityReason='Registro local. A pontuação pessoal usa os horários deste aparelho.';
+    }catch(error){current=null;filter=null;throw error;}
     resetClock();await putActivity(current);await setActiveId(current.clientId,scope.userId);
     try{await beginNativeLocation(options.background??(Platform.OS==='android'));await beginSteps();}
     catch(error){
       await stopNativeLocation();
+      if(current.serverId)try{await api('activities/'+current.serverId,{method:'DELETE',expectedUserId:scope.userId,expectedSessionEpoch:scope.epoch});}catch{/* An incomplete local row never earns points. */}
       await removeActivity(current.clientId,current.ownerId);await setActiveId(null,scope.userId);current=null;filter=null;
       throw error;
     }
@@ -360,27 +367,36 @@ export async function resumeCardio():Promise<void>{
 export async function finishCardio():Promise<LocalActivity>{
   return scopedLocked(async scope=>{
     if(!current||!['recording','paused','interrupted'].includes(current.status))throw new ApiError('Nenhuma sessão em andamento.','NO_SESSION');
-    accrue();await stopNativeLocation();current.status='review';current.endedAt=new Date().toISOString();
-    const network=await NetInfo.fetch();current.endedOffline=!network.isConnected;
-    current.filterSnapshot=filter?.snapshot()??null;
-    await persist();emit();return publicActivity(current);
+    accrue();await stopNativeLocation();
+    const reviewed:StoredActivity={...current,status:'review',endedAt:new Date().toISOString(),endedOffline:false,filterSnapshot:filter?.snapshot()??null};
+    try{await putActivity(reviewed);}
+    catch(error){
+      current.status='interrupted';current.stepsReliable=false;filter?.pause();current.segment++;
+      current.filterSnapshot=filter?.snapshot()??null;
+      lastError='Não foi possível salvar a revisão. O registro foi interrompido; tente finalizar novamente.';
+      emit();throw error;
+    }
+    current=reviewed;emit();return publicActivity(current);
   });
 }
 export async function saveCardio(notes=''):Promise<LocalActivity>{
+  const scope=captureAccountScope();
   const result=await scopedLocked(async scope=>{
     if(!current||current.status!=='review')throw new ApiError('Finalize a sessão antes de salvar.','REVIEW_REQUIRED');
-    current.notes=notes.trim().slice(0,2000);current.status='saved';current.syncStatus='pending';
-    await enqueue(current);await setActiveId(null,scope.userId);const result=publicActivity(current);emit();return result;
+    const saved:StoredActivity={...current,notes:notes.trim().slice(0,2000),status:'saved',syncStatus:'pending'};
+    await enqueue(saved);current=saved;emit();
+    await setActiveId(null,scope.userId);return publicActivity(saved);
   });
-  void syncPendingActivities().catch(()=>{});
-  return result;
+  await syncPendingActivities();
+  assertAccountScope(scope);const stored=await readActivity(result.clientId,result.ownerId);assertAccountScope(scope);
+  return stored?publicActivity(stored):result;
 }
 export async function discardCardio():Promise<void>{
   await scopedLocked(async scope=>{
     if(!current)return;
     await stopNativeLocation();
-    // Server start rows carry no completed points; attempt cleanup without blocking local discard.
-    if(current.serverId)try{await api('activities/'+current.serverId,{method:'DELETE',expectedUserId:scope.userId,expectedSessionEpoch:scope.epoch});}catch{/* Remains incomplete and cannot score. */}
+    // Discard the local summary as well as the private captured route.
+    if(current.serverId){try{await api('activities/'+current.serverId,{method:'DELETE',expectedUserId:scope.userId,expectedSessionEpoch:scope.epoch});}catch(error){if(!(error instanceof ApiError&&error.status===404))throw error;}}
     await removeActivity(current.clientId,current.ownerId);await setActiveId(null,scope.userId);
     current=null;filter=null;route=[];lastError=null;emit();
   });
@@ -398,17 +414,17 @@ export async function deleteLocalActivity(clientId:string):Promise<void>{
     if(!activity)return;
     if(current?.clientId===clientId){await stopNativeLocation();await setActiveId(null,scope.userId);current=null;filter=null;route=[];}
     await deleteRoute(clientId);
-    if(activity.serverId){
-      activity.pendingDelete=true;activity.syncStatus='pending';activity.pointCount=0;
-      await enqueue(activity);
-    }else await removeActivity(clientId,ownerId());
+    // A completion may have committed locally before its acknowledgement was
+    // stored. Always enqueue deletion and resolve the summary by client ID too.
+    activity.pendingDelete=true;activity.syncStatus='pending';activity.pointCount=0;
+    await enqueue(activity);
     emit();
   });
-  void syncPendingActivities().catch(()=>{});
+  await syncPendingActivities();
 }
 export async function saveManualActivity(input:{modality:Modality;durationMinutes:number;distanceKm?:number;environment?:Environment;notes?:string}):Promise<LocalActivity>{
   const scope=captureAccountScope();
-  const allowed:Modality[]=['walking','running','cycling','strength','football','basketball','volleyball','other'];
+  const allowed:Modality[]=['walking','running','cycling','strength','football','basketball','volleyball'];
   if(!allowed.includes(input.modality)||!Number.isFinite(input.durationMinutes)||input.durationMinutes<=0||input.durationMinutes>24*60)throw new ApiError('Informe modalidade e duração válidas.','INVALID_ACTIVITY');
   if(input.distanceKm!==undefined&&(!Number.isFinite(input.distanceKm)||input.distanceKm<0||input.distanceKm>1000||!['walking','running','cycling'].includes(input.modality)))throw new ApiError('Distância manual inválida para esta modalidade.','INVALID_DISTANCE');
   const activity=freshActivity(input.modality,'manual',input.environment??'outdoor');
@@ -417,23 +433,29 @@ export async function saveManualActivity(input:{modality:Modality;durationMinute
   activity.endedAt=new Date().toISOString();
   activity.startedAt=new Date(Date.now()-activity.totalSeconds*1000).toISOString();
   activity.status='saved';activity.syncStatus='pending';activity.notes=input.notes?.trim().slice(0,2000)??'';
-  activity.signal='lost';activity.stepsReliable=false;activity.endedOffline=true;
-  activity.eligibilityReason='Registro manual de duração/distância. Sem medição GPS e sem horário autoritativo de início; elegibilidade depende do regulamento e revisão.';
-  await enqueue(activity);assertAccountScope(scope);emit();void syncPendingActivities().catch(()=>{});
-  return publicActivity(activity);
+  activity.signal='lost';activity.stepsReliable=false;activity.endedOffline=false;
+  activity.eligibilityReason='Duração e distância informadas por você, sem medição GPS. Registro e pontuação ficam neste aparelho.';
+  await enqueue(activity);assertAccountScope(scope);emit();await syncPendingActivities();
+  assertAccountScope(scope);const stored=await readActivity(activity.clientId,scope.userId);assertAccountScope(scope);
+  return publicActivity(stored??activity);
 }
 export async function syncPendingActivities():Promise<void>{
   const scope=captureAccountScope();
   if(syncQueue){
     const previous=syncQueue;
-    if(syncAccount?.userId===scope.userId&&syncAccount.epoch===scope.epoch)return previous;
-    try{await previous;}catch{/* Old account requests were canceled; its outbox remains untouched. */}
+    const sameOwner=syncAccount?.userId===scope.userId&&syncAccount.epoch===scope.epoch;
+    try{await previous;}catch(error){
+      assertAccountScope(scope);
+      if(sameOwner)throw error;
+    }
+    // A record may have been enqueued after the previous batch took its ID
+    // snapshot. Drain again before reporting that this save is complete.
     assertAccountScope(scope);
     return syncPendingActivities();
   }
   syncAccount=scope;
   const work=(async()=>{
-    const network=await NetInfo.fetch();assertAccountScope(scope);if(!network.isConnected)return;
+    assertAccountScope(scope);
     syncing=true;emit();
     try{
       const ids=await queued(scope.userId);assertAccountScope(scope);
@@ -443,12 +465,18 @@ export async function syncPendingActivities():Promise<void>{
         const requestOwner={expectedUserId:scope.userId,expectedSessionEpoch:scope.epoch};
         if(activity.pendingDelete){
           try{
-            if(activity.serverId)await api('activities/'+activity.serverId,{method:'DELETE',...requestOwner});
+            let summaryId=activity.serverId;
+            if(!summaryId){
+              const history=await api<{items:{id:string;clientId:string}[]}>('activities',requestOwner);
+              assertAccountScope(scope);
+              summaryId=history.items.find(item=>item.clientId===activity.clientId)?.id??null;
+            }
+            if(summaryId)await api('activities/'+summaryId,{method:'DELETE',...requestOwner});
             assertAccountScope(scope);await removeActivity(id,scope.userId);assertAccountScope(scope);
           }catch(error){
             assertAccountScope(scope);
             if(error instanceof ApiError&&error.status===404)await removeActivity(id,scope.userId);
-            else{await markAttempt(id,error instanceof ApiError?error.code:'DELETE_SYNC_ERROR');if(error instanceof ApiError&&error.code==='NETWORK_ERROR')break;}
+            else{await markAttempt(id,error instanceof ApiError?error.code:'LOCAL_DELETE_ERROR');throw error;}
           }
           continue;
         }
@@ -459,16 +487,15 @@ export async function syncPendingActivities():Promise<void>{
             : await api<{id:string;eligibility?:string;ineligibleReason?:string}>('activities/import',{method:'POST',...requestOwner,body:importPayload(activity)});
           assertAccountScope(scope);
           activity.serverId=response.id??activity.serverId;
-          activity.syncStatus=response.eligibility==='ineligible'?'ineligible':'server_confirmed';
-          activity.eligibilityReason=response.ineligibleReason??(response.eligibility==='pending_review'?'Atividade salva no servidor, aguardando revisão de elegibilidade.':null);
+          activity.syncStatus='local_saved';
+          activity.eligibilityReason=response.ineligibleReason??'Salva neste aparelho. Pontuação pessoal calculada localmente, sem validação por servidor.';
           await acknowledge(activity,()=>assertAccountScope(scope));assertAccountScope(scope);
           if(current?.clientId===id&&current.ownerId===scope.userId)current=activity;
         }catch(error){
           assertAccountScope(scope);
-          await markAttempt(id,error instanceof ApiError?error.code:'SYNC_ERROR');assertAccountScope(scope);
-          if(error instanceof ApiError&&(error.status===401||error.code==='NETWORK_ERROR'))break;
-          activity.eligibilityReason=error instanceof Error?error.message:'Sincronização pendente.';
-          await putActivity(activity);assertAccountScope(scope);lastError=activity.eligibilityReason;
+          await markAttempt(id,error instanceof ApiError?error.code:'LOCAL_SAVE_ERROR');assertAccountScope(scope);
+          activity.eligibilityReason=error instanceof Error?error.message:'Não foi possível atualizar o histórico local.';
+          await putActivity(activity);assertAccountScope(scope);lastError=activity.eligibilityReason;throw error;
         }
       }
     }finally{syncing=false;emit();}
@@ -491,7 +518,7 @@ registerSessionCleanup(async(action,previousOwner)=>{
       // or keep its native recorder alive after identity invalidation.
       await stopNativeLocation();
       current=null;route=[];filter=null;lastError=null;initialized=false;initializedScope=null;
-      removeAppState?.();removeAppState=null;removeNetwork?.();removeNetwork=null;
+      removeAppState?.();removeAppState=null;
       if(timer){clearInterval(timer);timer=null;}emit();
     }
   });

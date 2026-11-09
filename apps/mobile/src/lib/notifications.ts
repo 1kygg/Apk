@@ -54,4 +54,4 @@ export async function scheduleReminders(preferences:ReminderPreferences):Promise
 export async function getReminderPreferences(){
   const scope=captureAccountScope();const preferences=await getLocalPreference<ReminderPreferences>('reminders.'+scope.userId+'.preferences');assertAccountScope(scope);return preferences;
 }
-registerSessionCleanup(async(_action,userId)=>{if(userId)await cancelOwnerReminders(userId);});
+registerSessionCleanup(async(_action,userId)=>{if(userId)await cancelOwnerReminders(userId);},-10);

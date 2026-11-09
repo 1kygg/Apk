@@ -1,35 +1,17 @@
-# Arquitetura
+# Arquitetura da versão local 1.1.0
 
-Monorepo npm com aplicativo React Native/TypeScript e módulos nativos Expo SDK54; backend Fastify/Node22; PostgreSQL16. Não há autenticação por e-mail enviado pelo cliente nem backend em memória como substituto de produção.
+O aplicativo React Native/TypeScript com Expo SDK 54 executa no celular. Não há login, tokens, chamadas HTTP da aplicação ou servidor necessário para abrir o perfil e usar treinos, histórico e pontuação.
 
-```text
-apps/mobile ── HTTPS /v1 ── apps/api ── PostgreSQL
-  │                           │
-  ├─ SQLite (rotas/filas)      ├─ packages/domain (calendário e pontuação)
-  ├─ SecureStore (refresh)    └─ packages/training (planos e biblioteca)
-  └─ módulos nativos
-```
+- `auth.ts` mantém o ciclo do perfil local; o nome histórico do arquivo não indica autenticação de identidade. Nome e foto são escolhidos pela pessoa e persistidos no aparelho.
+- `api.ts` é uma fachada de métodos locais sobre `local-service.ts`/SQLite. Não executa `fetch`. O serviço mantém preferências, planos, conclusões e histórico com transações e chaves idempotentes.
+- `storage.ts` mantém captura GPS, segmentos e consolidações locais. Uma fila de escrita comum evita misturar transações exclusivas do serviço com gravações da captura; falhas transitórias de bloqueio têm tentativas limitadas.
+- `local-score.ts` calcula a constância pessoal e quilômetros separados com horários do aparelho. Não fabrica validação por servidor nem ranking entre celulares. Uma sessão adaptada tem o mesmo valor diário.
+- `packages/training` contém biblioteca e ilustrações originais, critérios de ambiente/equipamentos, recuperação e geração diária. Planos iniciados preservam a versão original e as adaptações separadas.
+- `tracking.ts` usa localização/TaskManager, serviço visível Android e persistência local. Lacunas e pausas não são conectadas; retomada de processo não inventa tempo ou distância.
+- `RoutePreview.tsx` desenha os pontos GPS em SVG no aparelho. Não é mapa de ruas, não baixa tiles e não depende de chave de mapas.
 
-## Fronteiras de confiança
+As APIs de pedômetro, notificações, foto, localização e compartilhamento continuam nativas. A foto é copiada para documentos privados do app. Os callbacks são vinculados ao perfil e à geração da sessão local para impedir gravações atrasadas em outro perfil. Não há verificação de identidade ou proteção absoluta contra alteração do relógio/dados do aparelho.
 
-A API valida ID tokens Google/Apple antes de emitir tokens próprios. Access tokens curtos e refresh rotacionável separam sessão e provedor. Authorization no backend consulta usuário e associação/role do grupo em cada operação; UUIDs não são credenciais.
+O backend anterior permanece em `apps/api` como módulo histórico e opcional, com suas migrações e testes. Ele não recebe dados do aplicativo local. Sua configuração está separada em `docs/SETUP_ONLINE_LEGACY.md`.
 
-Banco e migrações mantêm restrições de unicidade/idempotência. Ranking é calculado com regras persistidas e timestamps do servidor. Datas do telefone não dão autorização para pontuar no passado. Testes de API usam Postgres real e identidade injetada apenas no construtor em memória do servidor de teste.
-
-## Local e sincronização
-
-SQLite guarda progresso, trajetos privados e fila por pessoa. Activity IDs/chaves estáveis permitem reenvio idempotente. Access token não vai ao SQLite; refresh usa armazenamento seguro do sistema. Exclusão de conta limpa o espaço local da pessoa.
-
-Resumos sincronizados não incluem coordenadas. Sessões sem hora verificável continuam úteis no histórico e recebem estado de elegibilidade próprio. Captura local de GPS funciona sem internet; mapa e sincronização têm dependências separadas.
-
-## Módulos nativos
-
-Google Sign-In e Apple Authentication, localização/TaskManager com serviço Android, Pedometer opcional, notificações locais, seletor de imagens, compartilhamento e SecureStore exigem development build ou build release. O Expo Go não é ambiente suficiente.
-
-No Android, a gravação é iniciada pela pessoa e continua por foreground service enquanto permitido pelo sistema; no iOS a continuidade exige permissões e configuração adequadas. Não se garante rastreamento após fechamento forçado. Pedômetro em primeiro plano tem limites distintos do GPS; passos incompletos devem permanecer identificados.
-
-## Build e operação
-
-O CI usa ações oficiais fixadas por SHA, permissões somente de leitura nos jobs que executam código de PR e escrita apenas no job de lockfile, restrito ao push da branch de trabalho. Não usa pull_request_target, EAS ou runner maior. APK é release assinado para testes internos; publicação exige assinatura própria privada e configuração da loja.
-
-Scripts não implantam backend, habilitam cobrança nem criam contas OAuth. `docs/SETUP.md` lista configuração externa; `docs/TEST_MATRIX.md` separa automação de verificação nativa/física.
+O CI verifica TypeScript e testes, compila o APK arm64 e oferece uma execução independente em emulador x86_64 para criação de perfil/ponto offline. Só resultados efetivamente concluídos são evidência. Sensores físicos, iOS e desempenho exigem testes próprios. A assinatura do APK interno é de desenvolvimento; publicação em loja exige preparação específica.

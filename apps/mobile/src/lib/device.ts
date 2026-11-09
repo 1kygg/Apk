@@ -3,22 +3,30 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
 import { api } from './api';
+import {getSession} from './auth';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Crypto from 'expo-crypto';
 import {inviteLink} from './invites';
 import { captureAccountScope,assertAccountScope } from './account-scope';
-export async function pickAvatar():Promise<string|null>{
-  const scope=captureAccountScope();
-  // System photo picker, no broad library, camera or microphone access requested.
-  const result=await ImagePicker.launchImageLibraryAsync({
-    mediaTypes:['images'],allowsEditing:true,aspect:[1,1],quality:0.85,
-    allowsMultipleSelection:false,
-  });
-  assertAccountScope(scope);
+/** Copies the selected photo into app storage; no upload or photo permission beyond the system picker. */
+export async function pickLocalAvatar():Promise<string|null>{
+  const result=await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],allowsEditing:true,aspect:[1,1],quality:0.85,allowsMultipleSelection:false});
   if(result.canceled||!result.assets[0])return null;
-  const image=await ImageManipulator.manipulateAsync(result.assets[0].uri,[{resize:{width:512,height:512}}],{compress:0.8,format:ImageManipulator.SaveFormat.JPEG,base64:true});
-  assertAccountScope(scope);
-  if(!image.base64)throw new Error('Não foi possível preparar o avatar.');
-  const response=await api<{avatarUrl:string}>('me/avatar',{method:'POST',expectedUserId:scope.userId,expectedSessionEpoch:scope.epoch,body:{base64:image.base64,mimeType:'image/jpeg'}});
-  assertAccountScope(scope);return response.avatarUrl;
+  const image=await ImageManipulator.manipulateAsync(result.assets[0].uri,[{resize:{width:512,height:512}}],{compress:0.8,format:ImageManipulator.SaveFormat.JPEG});
+  if(!FileSystem.documentDirectory)throw new Error('Armazenamento local de fotos indisponível.');
+  const directory=FileSystem.documentDirectory+'consta-avatars/';
+  await FileSystem.makeDirectoryAsync(directory,{intermediates:true});
+  const destination=directory+Crypto.randomUUID()+'.jpg';
+  await FileSystem.copyAsync({from:image.uri,to:destination});
+  return destination;
+}
+export async function pickAvatar():Promise<string|null>{
+  const scope=captureAccountScope();const avatarUrl=await pickLocalAvatar();
+  try{assertAccountScope(scope);}catch(error){if(avatarUrl)await FileSystem.deleteAsync(avatarUrl,{idempotent:true});throw error;}
+  if(!avatarUrl)return null;
+  const profile=getSession()?.user;
+  await api('me',{method:'PATCH',expectedUserId:scope.userId,expectedSessionEpoch:scope.epoch,body:{displayName:profile?.displayName,avatarUrl}});
+  return avatarUrl;
 }
 export async function shareInvite(code:string):Promise<void>{
   const normalized=code.trim();const url=inviteLink(normalized);

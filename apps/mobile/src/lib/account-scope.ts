@@ -1,12 +1,12 @@
 /**
- * Account fences are local authorization boundaries, never proof of identity.
- * Server authorization still verifies the bearer token on every request.
+ * Profile fences prevent stale callbacks from writing to another local profile.
+ * A profile is an alias on this device, never verified identity.
  */
 export interface AccountScope { readonly userId:string;readonly epoch:number }
 export class AccountScopeError extends Error {
   readonly code='ACCOUNT_CHANGED';
   readonly status=409;
-  constructor(){super('A conta mudou durante esta operação. Os registros pendentes permanecem vinculados à conta original.');this.name='AccountScopeError';}
+  constructor(){super('O perfil mudou durante esta operação. Os registros permanecem no perfil original.');this.name='AccountScopeError';}
 }
 export class AccountFence {
   private epoch=0;

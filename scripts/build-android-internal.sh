@@ -25,6 +25,6 @@ keytool -list -v -keystore "$ROOT_DIR/apps/mobile/android/app/debug.keystore" \
 printf '%s\n' \
   'Consta: APK release para TESTE INTERNO. Assinatura de desenvolvimento, não Google Play.' \
   "ABIs: ${ANDROID_ABIS:-arm64-v8a}" \
-  'Sem IDs OAuth/API configurados, login informa configuração pendente; não existe login falso.' \
-  'Não inclui chave privada. O certificado desta execução pode mudar numa próxima execução.' \
+  'Versão local: perfil com nome/foto, treinos, histórico e pontos sem login, servidor ou internet.' \
+  'Trajeto desenhado no aparelho, sem mapa de ruas. Sem ranking sincronizado entre celulares. Não inclui chave privada. O certificado desta execução pode mudar numa próxima execução.' \
   > INSTALL.txt

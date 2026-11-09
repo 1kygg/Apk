@@ -1,63 +1,62 @@
 # Consta
 
-Aplicativo **nativo** de treinos e desafios privados entre amigos, em português do Brasil. Android é a plataforma prioritária; a base React Native/TypeScript também suporta iOS. Não há versão web substituindo sensores nativos.
+Aplicativo **nativo** de treinos em português do Brasil, com perfil básico e pontuação pessoal salva no celular. A versão local 1.1.0 funciona **sem login, servidor ou internet** para criar o perfil, consultar treinos, registrar atividades e acompanhar pontos.
 
-## Download Android
+## Android
 
-[Baixar APK para teste interno](https://github.com/1kygg/Apk/releases/download/consta-android-893bed7/consta-internal.apk) · [checksum, certificado e verificação](https://github.com/1kygg/Apk/releases/tag/consta-android-893bed7).
+**Novo APK offline em preparação.** O link da versão local será incluído quando o build e suas verificações terminarem. A release anterior `consta-android-893bed7` pertence à versão com login pendente; ela não contém esta mudança.
 
-Android 8.0 ou superior, arm64, assinatura de desenvolvimento. Abra o APK no celular para instalar. O build foi compilado e sua assinatura/pacote foram conferidos; instalação em aparelho ainda não foi verificada. Sem backend HTTPS e OAuth configurados, a entrada informa configuração pendente. Consulte as instruções abaixo antes de uso conectado.
+O alvo é Android 8.0 ou superior, arm64. A base React Native/TypeScript também é compatível com iOS, cujo build requer macOS/Xcode. Não há site ou PWA substituindo o aplicativo.
 
-Código do APK: `893bed757c766e99182f25b1edb316fc4f460285`. [Build e 138 testes aprovados](https://github.com/1kygg/Apk/actions/runs/42487145111).
+## Como usar
 
-## Código
+1. Abra o app, informe seu nome ou apelido e escolha uma foto, se desejar.
+2. Toque em **Criar perfil neste aparelho**. Não há e-mail, senha ou conta Google.
+3. O app oferece opções iniciais de treino para iniciante, em casa e sem equipamento. Ajuste objetivo, rotina, tempo e preferências no **Perfil**.
+4. Conclua um treino ou salve uma atividade para registrar sua constância. A aba **Ranking** mostra seus próprios pontos e histórico neste aparelho.
 
-- `apps/mobile`: Expo SDK 54, cinco abas, Google Sign-In nativo, Apple Sign-In no iOS, SQLite, SecureStore, localização, pedômetro opcional e lembretes locais.
-- `apps/api`: API Fastify, validação de identidade no servidor, sessões renováveis, PostgreSQL, grupos privados, convites revogáveis, desafios, atividades, auditoria e ranking calculado no servidor.
-- `packages/domain`: calendário por fuso, limites e reposições, classificação, validação de regras e filtro GPS.
-- `packages/training`: biblioteca própria em texto, seleção diária com critérios, substituições e progressão moderada.
+Uma conclusão em um dia válido vale 1 ponto, até 5 por semana nas opções iniciais. As regras pessoais podem ser ajustadas e o recálculo fica explícito. Treinos adaptados têm o mesmo valor; quilômetros, passos e dificuldade não dão pontos extras de constância.
 
-A biblioteca e as sugestões não são avaliação médica. Treinos de força são autodeclarados. Dificuldade, carga e quilômetros não criam pontos extras de constância.
+## O que funciona sem internet
 
-## Começar
+- Perfil, foto local, biblioteca e sugestões diárias persistidas.
+- Execução de treinos, séries, descanso, adaptações e observações.
+- Registro GPS quando houver permissão, localização ativada e sinal do aparelho.
+- Traçado relativo dos pontos GPS em SVG, sem mapa de ruas ou download de mapas.
+- Histórico, pontuação pessoal, registros manuais e lembretes locais autorizados pelo sistema.
 
-Requisitos: Node.js 22, npm, PostgreSQL 16; para Android, Java 17 e Android SDK. Para iOS, macOS/Xcode.
+**Não há ranking sincronizado entre celulares nem grupos online nesta versão.** O compartilhamento pelo menu do sistema é opcional; o aplicativo escolhido para receber um arquivo ou mensagem pode precisar de internet. Os horários e a pontuação usam o aparelho, sem validação por servidor.
 
-```sh
-npm install
-cp .env.example .env
-# Preencha .env: banco, JWT_SECRET aleatório >=32 bytes e IDs OAuth.
-npm run api:migrate
-npm run api:dev
-```
+## Executar e compilar
 
-Em outro terminal:
+Requisitos: Node.js 22, npm; para Android, Java 17 e Android SDK 36 com licenças aceitas. Não é necessário configurar `.env`, PostgreSQL ou OAuth para o aplicativo local.
 
 ```sh
+npm ci
 npm run android
 ```
 
-Use development build; Expo Go não contém todos os módulos. Veja [configuração completa](docs/SETUP.md), [regras](docs/RULES.md) e [privacidade](docs/PRIVACY.md).
-
-## Verificar e gerar APK
+Use development build nativo, pois Expo Go não contém todos os módulos. Para verificar e gerar o APK de teste:
 
 ```sh
 npm run typecheck
 npm test
-npm run test:integration
-npm run api:build
-npm run api:smoke
 npm run android:apk
 ```
 
-Integração usa PostgreSQL real, `RUN_DB_TESTS=1` e banco de teste descartável. Leia [a matriz de testes](docs/TEST_MATRIX.md) antes de executar: fixtures removem dados do banco de teste.
+Saída: `artifacts/android/consta-internal.apk`, checksum SHA256, certificado público e instruções. A assinatura é de desenvolvimento, para teste interno, sem publicação automática em loja. O projeto nativo gerado não deve receber mudanças permanentes fora dos config plugins.
 
-[GitHub Actions](https://github.com/1kygg/Apk/actions) executa verificações e compila APK release arm64 para **teste interno**, assinado com chave de desenvolvimento. O artifact temporário contém APK, checksum SHA256 e certificado público. Não contém chave privada. Não é assinatura de publicação na Play Store. Instalação: `adb install -r artifacts/android/consta-internal.apk`.
+Veja [execução e instalação](docs/SETUP.md), [regras locais](docs/RULES.md), [privacidade](docs/PRIVACY.md) e [matriz de verificação](docs/TEST_MATRIX.md).
 
-## Configurações externas e limites de verificação
+## Organização e limites da entrega
 
-Sem projeto OAuth configurado, login permanece indisponível com mensagem de configuração; não existe entrada simulada. Sem API implantada e URL HTTPS configurada, não há sincronização remota. Google Maps é opcional: falta da chave não deve impedir o registro GPS.
+- `apps/mobile`: perfil local, SQLite, cinco abas, pontuação pessoal, localização, pedômetro opcional e notificações locais.
+- `packages/training`: biblioteca original, seleção diária com critérios, substituições e recuperação.
+- `packages/domain`: cálculo de calendário e filtro GPS; também preserva regras da antiga arquitetura online.
+- `apps/api`: backend anterior, mantido como referência independente. Ele não é executado nem acessado pelo aplicativo local. Seus testes PostgreSQL são opcionais para quem trabalha nesse módulo.
 
-Testes automatizados e compilação devem ser confirmados pelo resultado da execução correspondente do CI. Login com duas contas reais, sensores, tela bloqueada, permissões, iOS e medições em aparelho físico precisam ser executados com as credenciais e o hardware adequados. Não há medição de 60 FPS ou autonomia registrada nesta entrega. Passos usam pedômetro nativo opcional; não há importação Health Connect/HealthKit ou relógio implementada.
+A biblioteca não é avaliação médica. Conclusão de exercícios de força é autodeclarada; sensores não comprovam sua execução. Passos usam pedômetro nativo opcional; não há importação Health Connect/HealthKit ou relógio.
 
-Nenhum serviço pago é ativado pelos scripts. Consulte [dependências e distribuição](docs/SETUP.md#custos-e-publicação).
+Testes automatizados de SQL usam SQLite real do Node através de adaptador, sem comprovar o Expo SQLite em aparelho. Sensores, permissões reais, tela bloqueada, iOS, acessibilidade física, FPS e bateria continuam exigindo verificação específica. Não há garantia universal de 60 FPS ou registro após fechamento forçado.
+
+Não há custo de hospedagem ou serviço obrigatório para uso local. Nenhum serviço pago foi ativado. Publicação nas lojas é opcional e tem [requisitos e custos próprios](docs/SETUP.md#custos-e-distribuição).

@@ -1,93 +1,96 @@
-# Matriz de verificação
+# Matriz de verificação da versão local
 
-**Estado de verificação:** resultados automatizados devem ser vinculados ao comando executado, à revisão e, quando aplicável, ao run do CI. Este arquivo não declara testes físicos realizados. O ambiente local foi disponibilizado no encerramento da implementação; o CI também executa as verificações automatizadas.
+O código atual é o Consta 1.1.0 com perfil local. **Nenhum teste físico, emulador ou medição de FPS/bateria é declarado neste documento sem evidência específica.** Código compilável e mocks não comprovam sensores ou comportamento do Expo no aparelho.
 
-Registre a revisão, data, sistema, aparelho e resultado em cada execução. Não marque um item como aprovado apenas porque existe teste, mock, tela ou integração compilável.
+## Testes automatizados
 
-## Automação
+```sh
+npm run typecheck
+npm test
+```
 
-Comandos: `npm run typecheck`, `npm test`, `npm run api:migrate`, `npm run api:build`. Integração real: `RUN_DB_TESTS=1` com DATABASE_URL/TEST_DATABASE_URL apontando a **PostgreSQL 16 ou 17 descartável**, e `npm run test:integration`. Fixtures removem tabelas/dados de teste; nunca use banco pessoal ou de produção.
+As suites mobile usam testes de cálculo, ciclo de perfil, contratos de registros, histórico e SQL/rollback com **SQLite real do Node através de um adaptador**. As APIs de localização, tarefas, seletor de foto, notificações e sensores usam mocks quando executadas no Node. Isso não verifica o Expo SQLite, permissões ou hardware nativos.
 
-O [workflow](../.github/workflows/ci.yml) executa TypeScript, migrações, suites de todos os workspaces, integração com PostgreSQL e build da API. O resultado de cada etapa é a evidência; uma execução interrompida ou falha não é aprovação.
-
-| Área | Verificação automatizada prevista | Evidência necessária |
+| Área atual | Casos automatizados esperados | Evidência |
 | --- | --- | --- |
-| Identidade/sessão | rejeição de tokens, refresh, revogação/logout, acesso privado; identidade de teste somente por injeção interna | log do suite API; provedor real separado |
-| Grupos/convites | associação exigida, isolamento, convites revogáveis e gestão administrativa | integração PostgreSQL |
-| Treino diário | critérios de ambiente/equipamentos, estabilidade e histórico recente | suite training e integração de planos |
-| Execução | substituição válida, adaptações, snapshot imutável após início | suite training/API |
-| Calendário | fuso IANA, semana configurável, semanas incompletas, limite diário/semanal e máximo possível | suite domain |
-| Reposição/empate | recuperar oportunidade anterior na semana, sem ampliar teto; semanas com meta e empate compartilhado | suite domain |
-| Limites de tempo | meia-noite, mudança de fuso/DST, início inclusivo, encerramento, janela noturna e sincronização atrasada | suite domain/API |
-| Idempotência | reenvios da mesma atividade e restrições transacionais concorrentes | integração PostgreSQL |
-| Pontuação | servidor como autoridade, fontes distintas, offline sem horário verificável e atividades excluídas | suite domain/API |
-| GPS matemático | precisão ruim, ruído, salto, tempo fora de ordem, lacuna, pausa e velocidade implausível | suite GPS; não valida sensor |
-| Privacidade | endpoints de membros não expõem e-mails/rotas, acesso entre grupos negado e exclusões | integração API |
-| Build Android | Expo prebuild e Gradle release; APK + checksum + certificado público | job Android concluído |
+| Perfil local | nome/foto opcional, persistência, retomada sem rede, rejeição de nome inválido e criação concorrente | suite `auth.test.ts`, sem login simulado ou provedor |
+| Isolamento/exclusão | impedir callback de outro perfil, apagar somente os dados próprios, fila e preferências | SQLite por adaptador e fences locais |
+| Biblioteca/plano | gerar e persistir sugestão diária, recuperar histórico, equipamentos e substituições compatíveis | suites training e local-service |
+| Execução | snapshot após início, séries/adaptações, conclusão idempotente e exclusão sem recriar sessão | SQLite local-service/trainingStore |
+| Pontuação | 1 ponto por dia, limite semanal, fuso, meia-noite, semanas, IDs repetidos, exclusão e versões adaptadas | suite local-score |
+| Modalidades | quilômetros separados, esportes sem distância, passos sem bônus e sem ciclismo | local-score e contratos de registros |
+| GPS matemático | precisão ruim, saltos, pausa, perda de sinal, tempo fora de ordem e velocidade incompatível | suite GPS com posições controladas |
+| Cardio local | salvar sem HTTP, consolidar histórico, pausa sem quilômetros artificiais, recuperação sem inventar tempo | tracking com SDK nativo mockado e SQLite real do Node |
+| Compartilhamento | GPX opt-in, remover extremos e conexões que atravessam áreas ocultas, manter segmentos | suite sharing-model |
+| Gravação local | transações, ACK, rollback, isolamento e tratamento de concorrência | storage/local-service; não comprova bloqueios no Expo real |
+| Android | export, prebuild, Gradle release, assinatura, pacote e checksum | somente o run efetivamente concluído |
 
-Teste automatizado de GPS recebe posições controladas; não mede recepção real, bateria ou continuidade. Teste de autenticação por identidade injetada não comprova Google/Apple reais. Não há importação Health Connect/HealthKit implementada para testar; o app não deve anunciá-la.
+As suites de `packages/domain` também preservam regras do backend anterior. `apps/api` mantém testes unitários e integração PostgreSQL opcionais para seu próprio módulo; eles não são dependência do app local e não provam ranking online nesta versão.
+
+Para rodar a integração histórica, use banco **descartável de teste**, `TEST_DATABASE_URL` e `npm run test:integration`. Fixtures removem dados; nunca aponte para produção ou um banco pessoal. Identidades injetadas na factory de testes do backend não são login real Google/Apple.
 
 ## Emulador Android
 
-Pendentes até uma execução em emulador com development/release build, API e OAuth configurados. Use duas contas reais e, para sincronização entre dispositivos, duas instâncias independentes. Emulador valida fluxo, permissões e rotas injetadas; não substitui aparelho.
+Pendente até execução registrada com development/release build. A criação de perfil e os testes abaixo não exigem API, OAuth ou servidor.
 
 | Caso | Procedimento e resultado esperado |
 | --- | --- |
-| Login | entrar com Google; cancelar; negar/invalidar credencial; desligar rede. Falha legível, sem sessão falsa |
-| Sessão | reiniciar app, expirar access token e renovar, fazer logout. Token de refresh revogado não reabre sessão |
-| Duas contas | contas A e B no mesmo grupo, C em outro. A/B veem atualização sincronizada; C recebe acesso negado |
-| Convite | compartilhar pelo menu nativo, abrir link após autenticar; revogar e tentar novamente |
-| Onboarding | alterar objetivo, dias/tempo, ambiente, equipamentos, modalidades e exercícios evitados; persistir ao reiniciar |
-| Plano diário | abrir repetidamente sem troca arbitrária; substituir, reduzir séries e iniciar; preservar snapshot |
-| Calendário | criar/duplicar desafio com novas datas; validar ausência de dias, fim anterior e limites incompatíveis; conferir resumo |
-| Alteração em andamento | exigir motivo, prévia/confirmacão e auditoria; outro participante vê aviso |
-| Ranking | confirmar fonte/modalidade, empates, última atualização e motivo de inelegibilidade; sem participantes inventados |
-| GPS | injetar percurso com salto e perda de sinal; pausar, deslocar, retomar; não ligar a lacuna nem somar a pausa |
-| Offline | iniciar offline, salvar, fechar/reabrir, sincronizar duas vezes; histórico preservado sem crédito indevido/duplicado |
-| Interrupção | matar processo durante gravação, recuperar; indicar intervalo sem dados, sem inventar pontos |
-| Permissões | negar/revogar localização, atividade e notificações durante fluxo; poder continuar outras funções |
-| Passos | distinguir sessão, diário indisponível e incompleto; não mostrar no ciclismo nem estimativa como GPS |
-| Avatar | selecionar pelo seletor do sistema, cancelar e trocar; nenhuma solicitação de câmera obrigatória |
-| Exclusões | excluir atividade e verificar ranking; excluir conta e verificar sessão, cache e dados associados |
-| Notificações | habilitar, alterar agenda pessoal e horários de silêncio; desafio mantém calendário próprio |
-| Acessibilidade | TalkBack, fontes ampliadas, contraste, foco, controles >=48dp, erros/estados anunciados e rotação/teclado |
+| Primeira abertura offline | desligar Wi-Fi/dados, criar nome e foto opcional; entrar no app sem tela Google ou configuração de servidor |
+| Persistência | fechar e reabrir; mesmo perfil, foto e histórico permanecem |
+| Foto | escolher, cancelar, trocar; reabrir depois de encerrar seletor/processo, sem URI temporária quebrada |
+| Preferências | revisar objetivo, dias, tempo, ambiente, materiais e exercícios evitados; persistir alterações |
+| Treino do dia | reabrir sem trocar arbitrariamente, substituir antes de iniciar, preservar snapshot depois do início |
+| Execução | reduzir séries, versão mais fácil, observações, descanso e conclusão; versões adaptadas valem o mesmo |
+| Pontos | várias conclusões no dia continuam valendo 1; respeitar teto semanal e regras pessoais |
+| Regra editada | mostrar aviso de recálculo de todo o histórico; salvar sem rede e atualizar resultado |
+| Datas | fuso da rotina, começo de semana e sessão cruzando meia-noite; horários do aparelho explicitamente locais |
+| Manual/esportes | registrar esteira/bicicleta interna sem chamar distância de GPS; esporte pode ter somente duração |
+| GPS injetado | percurso com saltos/lacunas; pausar, mover e retomar sem criar reta ou distância durante pausa |
+| Traçado | desenhar pontos em SVG sem baixar mapa; mostrar quebra entre segmentos |
+| Interrupção | matar processo e recuperar; não inventar tempo ativo ou trajeto do intervalo perdido |
+| Permissões | negar/revogar localização, movimento, foto ou notificações; funções não relacionadas continuam disponíveis |
+| Passos | sessão distinta de total diário; ausência de dados diferente de zero; não mostrar no ciclismo |
+| Exclusão | excluir atividade e recalcular pontos; apagar perfil e conferir nome/foto/rotas/preferências/lembretes |
+| Compartilhamento | resumo sem rota por padrão, GPX opcional com ocultação dos extremos; não publicar automaticamente |
+| Acessibilidade | TalkBack, fontes ampliadas, contraste, foco, erro/estado anunciado e controles confortáveis |
+
+Um emulador comprova fluxos e posições injetadas, não recepção GPS, pedômetro ou bateria de aparelho físico. Não use participantes fictícios ou registros de teste em um APK distribuído como se fossem dados reais.
 
 ## Aparelho físico Android
 
-**Não executado nesta sessão.** Requer aparelho Android intermediário, localização real e duas contas/provedores configurados. Registre fabricante/modelo, SoC/RAM, Android, build, bateria inicial, rede, permissões e revisão.
+**Pendente.** Use aparelho intermediário e APK release. Registre modelo, SoC/RAM, Android, revisão, versão do app, bateria, rede e permissões.
 
-1. Instale o **APK release**, com API HTTPS real. Entre e execute os fluxos de duas contas e sincronização também em outro aparelho.
-2. Registre caminhada/corrida em percurso conhecido e seguro; compare distância com referência independente, relatando margem e condições, sem afirmar precisão absoluta. Repita com sinal ruim, parada, retomada e perda de sinal.
-3. Grave por pelo menos 20 minutos com tela bloqueada e app minimizado, incluindo pausa manual. Confira notificação do serviço, horário, quilômetros, segmentos e persistência. Repita com economia de bateria e mudança Wi-Fi/dados.
-4. Teste chamada/interrupção, negação/revogação de permissão, encerramento de processo pelo sistema e fechamento forçado. Após retomada, confira que o período perdido não foi inventado. Fechamento forçado não garante continuidade.
-5. Ative pedômetro para caminhada/corrida. Confira origem, sessão, indisponibilidade diária no Android e marcação de dados incompletos após segundo plano. Não atribua total diário à sessão.
-6. Reinicie offline e sincronize após prazos distintos. Confira estados salvo localmente, pendente, confirmado e inelegível. Reenvio não duplica registro ou pontos.
-7. Execute exclusão e compartilhamento GPX opt-in com ocultação das extremidades; confira que resumo do ranking não expõe trajeto.
+1. Desative Wi-Fi/dados, mantenha localização disponível, crie o perfil e execute treinos/histórico/pontos. Confirme que não aparece exigência de conexão.
+2. Escolha e troque foto; reinicie o aparelho e confira persistência. Negar/cancelar a foto não bloqueia o perfil.
+3. Registre caminhada/corrida em percurso conhecido; compare distância com referência independente e registre condições/margem, sem promessa de precisão absoluta.
+4. Teste sinal fraco, parada, pausa manual e retomada. O desenho e os quilômetros não podem conectar a pausa ou uma lacuna sem registro.
+5. Registre por ao menos 20 minutos com a tela bloqueada, depois minimizado e em economia de bateria. Confira serviço visível, tempos e dados preservados.
+6. Faça interrupção/chamada, negação/revogação de permissão, encerramento pelo sistema e fechamento forçado. Não prometa rastreamento após force-stop; retomar não inventa o período perdido.
+7. Ative pedômetro em caminhada/corrida e confira origem/contagem parcial. Android pode não oferecer total diário; esse estado não é zero confirmado.
+8. Conclua registros repetidamente e reabra o app; não duplicar histórico ou ponto diário. Apague uma atividade e confira recálculo.
+9. Apague o perfil e confirme limpeza local e de lembretes. Criar outro perfil não deve mostrar dados do anterior.
 
-## Desempenho e bateria em release
+## Desempenho, bateria e acessibilidade em release
 
-Sem hardware disponível, **não há resultados de FPS, memória ou autonomia**. O objetivo de transições estáveis não é garantia para todo aparelho.
+**Não há resultados medidos de FPS, memória ou autonomia nesta revisão.** A meta de transições estáveis não é uma garantia para todo aparelho.
 
-Procedimento repetível:
+- Faça pelo menos três amostras de 60 segundos com navegação, biblioteca, treino, histórico e traçado GPS. Use Android Studio Profiler/Perfetto para frames, CPU, memória e GC; evite gravador de tela quando ele alterar a medição.
+- Como amostra complementar, execute `adb shell dumpsys gfxinfo app.consta.mobile reset`, reproduza o cenário e salve `adb shell dumpsys gfxinfo app.consta.mobile framestats`. Interprete junto ao trace, sem tratá-lo isoladamente como FPS JavaScript.
+- Para bateria, use `adb shell dumpsys batterystats --reset`, faça sessão de duração definida com o aparelho fora da carga e depois salve `adb shell dumpsys batterystats app.consta.mobile`. Compare condições equivalentes e registre permissões/estado da tela.
+- Verifique fontes em 130%/200%, TalkBack, foco, contraste, teclado e preferência por reduzir movimentos. Confira estados vazio, carregando, erro de armazenamento e sessão recuperada.
+- Revise traces antes de compartilhar: não publique nome, foto, observações ou coordenadas privadas. Registre resultados agregados.
 
-- Use build release, aparelho intermediário e brilho/rede comparáveis; registre ao menos três repetições de 60 segundos em navegação, lista de atividades, treino e mapa durante sessão. Evite gravador de tela se ele alterar a medição.
-- Android Studio Profiler/Perfetto: observe frames atrasados, jank, CPU, memória, GC e trabalho do serviço. Para uma amostra complementar: `adb shell dumpsys gfxinfo app.consta.mobile reset`; execute o cenário; depois `adb shell dumpsys gfxinfo app.consta.mobile framestats > framestats.txt`. Isso mede o pipeline do sistema e deve ser interpretado junto ao trace, não como prova isolada de FPS JavaScript.
-- Compare quantidade e duração de frames com o orçamento da taxa de atualização do aparelho. Registre percentis e cenários de travamento; não transforme média em promessa universal.
-- Bateria: `adb shell dumpsys batterystats --reset`, gravação de GPS com tela bloqueada por duração definida, depois `adb shell dumpsys batterystats app.consta.mobile > battery.txt`. Use aparelho desconectado da carga e compare cenários equivalentes; o teste pode exigir permissões ADB.
-- Teste fontes do sistema em 130%/200%, TalkBack, reduzir movimentos, contraste, foco e controles. Verifique os estados de carregamento, vazio, erro, offline e pendente. Não esconda informações essenciais em animações.
-- Guarde traces somente após verificar que não contêm dados sensíveis, coordenadas ou tokens. Publique relatório agregado, sem trajetos privados.
+## iOS
 
-## iOS e distribuição
+Pendentes: compilação Mac/Xcode, instalação, foto persistente, permissões de movimento, pedômetro diário, segundo plano/tela bloqueada, lembretes, VoiceOver/Dynamic Type e exclusão local. O app local não depende de login Apple/Google. Build Android não comprova esses fluxos.
 
-Pendentes: build macOS/Xcode, Sign in with Apple com nonce real, Google iOS/URL scheme, permissão de movimento, pedômetro diário, localização bloqueada/segundo plano, notificações, Dynamic Type/VoiceOver e exclusão de conta/autorização Apple. Aprovação de loja e formulários de privacidade não são testes automatizados.
+## Evidências e histórico
 
-## Registro de execução
-
-| Revisão / run | Ambiente | Casos | Resultado / evidências |
-| --- | --- | --- | --- |
-| Alterações locais da entrega, 08/11/2026 | Linux x64, Node 24.19.0, npm 11.9.0 | `domain` e `training`: TypeScript e suites | 66 testes domain + 12 training aprovados; não comprova sensores, OAuth nem compatibilidade do build Android |
-| Entrega local, 08/11/2026 | Linux x64, Node 24.19.0, PostgreSQL 17.11 | TypeScript completo; 35 mobile, 25 API, 66 domain, 12 training; build API e smoke HTTP do servidor compilado | 138 testes aprovados; 20 casos API com PostgreSQL real e 5 unitários; export Android e prebuild aprovados. SQL local usa SQLite real do Node por adaptador, sem verificar Expo no aparelho. Auth mobile usa mocks; não comprova OAuth nem sensores |
-| [893bed7 / run 42487145111](https://github.com/1kygg/Apk/actions/runs/42487145111) | CI PostgreSQL 16 / Ubuntu, Node 22 | TypeScript, migrações, 138 testes, API build/smoke HTTP e APK release arm64 | Aprovado; [assinatura, checksum e pacote conferidos](https://github.com/1kygg/Apk/releases/tag/consta-android-893bed7). Sem teste de instalação ou hardware |
-| Pendente | Emulador Android | Fluxos e permissões | Sem evidência ainda |
-| Pendente | Android físico intermediário | GPS, bloqueio, bateria, a11y, release | Sem evidência ainda |
-| Pendente | iOS físico | OAuth, localização, passos e a11y | Sem evidência ainda |
+| Revisão/run | Ambiente | Resultado e limite |
+| --- | --- | --- |
+| Implementação local 1.1.0, 09/11/2026 | Linux, testes Node/SQLite por adaptador | Suites locais de perfil, pontuação, armazenamento, cardio mockado e treinos executadas durante a implementação. Contagem/revisão final serão registradas ao encerrar a validação; não comprova SDK em aparelho |
+| Novo APK local | CI Android | Em preparação; vincular somente quando o build e a verificação concluírem |
+| [893bed7 / run 42487145111](https://github.com/1kygg/Apk/actions/runs/42487145111) | Entrega histórica com servidor, Node 22/PostgreSQL 16 | 138 testes e APK anterior aprovados, com [assinatura/checksum](https://github.com/1kygg/Apk/releases/tag/consta-android-893bed7). Não comprova a criação de perfil offline da versão 1.1.0 |
+| Emulador Android | Pendente | Sem evidência registrada nesta revisão |
+| Android físico intermediário | Pendente | GPS, tela bloqueada, pedômetro, permissões, acessibilidade e release |
+| iOS físico | Pendente | Instalação, movimento, localização, notificações e acessibilidade |

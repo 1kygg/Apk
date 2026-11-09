@@ -1,35 +1,45 @@
-# Privacidade e permissões
+# Privacidade e permissões da versão local
 
-Este documento descreve o comportamento técnico e decisões de implantação. O responsável pelo serviço deve disponibilizar uma política de privacidade com identidade do controlador, contato, finalidades, retenção e procedimento de atendimento antes de publicar o app.
+Este documento descreve o comportamento técnico do Consta 1.1.0. A distribuição em loja ainda exige política de privacidade com identificação e contato do responsável, finalidades e procedimento de atendimento.
 
-## Dados e acesso
+## Perfil e dados no aparelho
 
-A API recebe identidade validada pelo provedor e mantém apenas os dados necessários à conta, preferências, grupos, sessões, atividades e resultados. E-mails não aparecem para participantes. Toda operação de grupo exige associação/autorização no backend; conhecer um UUID não concede acesso. Convites podem ser revogados.
+O perfil é um **nome ou apelido local**, com foto opcional. Não há senha, login Google/Apple, token de acesso ou verificação da identidade. O app não envia o perfil para autenticação e não oferece recuperação de conta pela nuvem.
 
-Access token fica na memória; refresh token usa SecureStore do sistema. O segredo de assinatura JWT e credenciais de banco ficam apenas no backend. HTTPS é obrigatório em distribuição. O banco local fica no sandbox do sistema; SQLite não deve ser descrito como SQLCipher ou criptografia adicional.
+Preferências, treinos, progresso, observações, resumos de atividades e pontos ficam no SQLite privado do app. A foto escolhida é reduzida e copiada para o diretório de documentos do aplicativo, sem upload. Percursos GPS também ficam neste aparelho. O desenho do trajeto é uma projeção dos pontos capturados, sem consulta a um mapa de ruas externo.
 
-Percursos ficam no SQLite do aparelho. O backend recebe resumos para histórico e pontuação, não coordenadas da rota. Logs de aplicação não devem incluir tokens, registros de saúde, percursos ou conteúdo de solicitações. Não há anúncios ou uso de saúde para publicidade.
+Os dados locais ficam no sandbox do sistema. Esta implementação não adiciona SQLCipher ou criptografia própria ao banco e não deve anunciá-las. No Android, o backup do aplicativo está desativado por `allowBackup=false`. Backups e restauração do sistema, especialmente no iOS, dependem das configurações e políticas do aparelho; o Consta não oferece backup ou sincronização próprios.
+
+**Desinstalar o app, limpar seus dados ou perder o aparelho pode causar perda dos registros.** O perfil local não permite recuperar automaticamente pontos em outro celular. Não há ranking sincronizado entre amigos nesta versão.
 
 ## Permissões por função
 
-- Localização: solicitada ao iniciar registro de percurso. O serviço Android mostra notificação durante o registro; iOS exige consentimento específico para continuidade conforme a configuração.
-- Atividade física: pedômetro opcional para caminhada/corrida. Negar não impede treino ou GPS.
-- Notificações: lembretes locais opt-in, com possibilidade de desativar e horários de silêncio.
-- Avatar: seletor de fotos do sistema; não exige leitura indiscriminada da galeria.
-- Vibração: retorno opcional do cronômetro conforme suporte.
+- **Localização:** solicitada ao iniciar cardio GPS. A continuidade no Android usa serviço com notificação; no iOS depende da autorização correspondente. Criar perfil não exige localização.
+- **Atividade física:** acesso opcional ao pedômetro para caminhada/corrida. Negar não impede treinos ou registros manuais.
+- **Notificações:** lembretes locais, ativados pela pessoa, com possibilidade de desativar e escolher horários de silêncio.
+- **Foto:** seletor de fotos do sistema, sem requisito de câmera ou leitura indiscriminada da galeria. A escolha é opcional.
+- **Vibração:** retorno opcional do cronômetro, conforme o aparelho.
 
-Câmera, microfone, contatos e fotos de comprovação não são requisitos para pontuar. Fotos de avatar são reduzidas antes do envio; não envie imagens sem direito de uso.
+Câmera, microfone, contatos e fotos de comprovação não são requisitos para pontuar. Os controles de permissão do sistema continuam prevalecendo sobre as opções do app.
 
-## Compartilhar, excluir e desconectar
+## Compartilhar por escolha
 
-O compartilhamento padrão envia resumo, sem rota. A exportação GPX é uma ação explícita; oculta por padrão áreas de 200 metros no início e fim e preserva quebras entre segmentos. Isso reduz a exposição, mas não garante anonimato: outros pontos podem revelar locais e hábitos. Depois de compartilhar um arquivo com outra pessoa, o app não controla cópias externas.
+O compartilhamento padrão envia um resumo, sem percurso. Exportar GPX é uma escolha explícita: por padrão, são ocultadas áreas de 200 metros no início e no fim, e lacunas/pausas não são conectadas. Isso reduz exposição, sem garantir anonimato; os demais pontos podem revelar locais e hábitos.
 
-A pessoa pode excluir atividades e a própria conta. Exclusão de conta deve remover sessões, dados associados no servidor e dados locais daquela conta. O administrador do serviço deve aplicar a mesma política a backups dentro da retenção publicada; a API não elimina automaticamente cópias de backup externas.
+O arquivo compartilhado pode conter localização sensível. O app não controla cópias que forem enviadas a outras pessoas ou aplicativos. O menu de compartilhamento pertence ao sistema; o aplicativo de destino pode precisar de internet. Não há publicação automática de trajetos, fotos ou resultados.
 
-Desconectar passos interrompe a coleta opcional. Para revogar permissões, use Perfil e configurações do sistema: Android > Apps > Consta > Permissões/Notificações; iOS > Ajustes > Consta e Privacidade e Segurança. Autorizações Google/Apple também podem ser revogadas na conta do provedor. Logout da aplicação encerra sua sessão; não equivale a apagar a conta Google ou Apple.
+## Excluir e revogar
 
-## Minimização e operação
+Excluir uma atividade remove o registro local e seu trajeto associado e recalcula os pontos pessoais. Apagar o perfil remove nome, foto armazenada pelo app, preferências, treinos, atividades, percursos, pontos e lembretes daquele perfil. Isso não apaga a imagem original da galeria nem cópias externas compartilhadas.
 
-Não exponha PostgreSQL à internet nem habilite logs de corpo de requisição no proxy. Restrinja chave Maps por pacote/certificado, configure backups privados e defina retenção antes do uso por um grupo real. A versão fornecida não contrata hospedagem, coleta analytics de terceiros ou transfere dados de saúde a anunciantes.
+Permissões podem ser revogadas pelo sistema: Android > Apps > Consta > Permissões/Notificações; no iOS, Ajustes > Consta e Privacidade e Segurança. Para deixar de contar passos, desative essa opção antes da sessão e revogue a permissão correspondente, se desejar. Não existe integração de saúde online para desconectar.
 
-Quando não houver dado de passos confiável, mostre indisponibilidade; zero somente quando medido. Android não fornece total diário pelo pedômetro usado nesta versão. Passos da sessão com perda de acompanhamento em segundo plano ficam incompletos; nunca se atribui a ela o total diário.
+## Limites e minimização
+
+Os horários e a pontuação são calculados no aparelho. Eles não são resultados verificados por servidor nem comprovação física dos exercícios. Alterar relógio/fuso pode modificar o resultado local.
+
+Não há anúncios, envio de saúde a anunciantes ou serviço de sincronização contratado. Logs do app não devem conter perfis, fotos, observações ou coordenadas. Diagnósticos e traces usados em testes precisam ser revisados antes de compartilhar.
+
+Passos indisponíveis não significam zero confirmado. Android não fornece total diário pelo adaptador de pedômetro desta versão. Uma contagem parcial da sessão não vira total completo, e o total diário não é atribuído automaticamente a uma sessão. Health Connect, HealthKit e importação de relógios não estão implementados.
+
+O backend anterior em `apps/api` tem regras e dependências próprias, mas não é acessado pelo app local. A presença desse código no repositório não significa transmissão ou armazenamento remoto nesta versão.

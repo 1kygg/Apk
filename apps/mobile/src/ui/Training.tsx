@@ -33,7 +33,7 @@ export function Library(){
  const [search,setSearch]=useState(''),[environment,setEnvironment]=useState<Environment|null>(null),[selected,setSelected]=useState<Exercise|null>(null);
  return <Screen title="Treinos" subtitle="Uma biblioteca para conhecer e adaptar seus movimentos." onRefresh={resource.reload} refreshing={resource.loading}>
   <Field label="Buscar exercício" value={search} onChangeText={setSearch}/><Row><Choice title="Todos" selected={!environment} onPress={()=>setEnvironment(null)}/>{Object.entries(environmentLabels).map(([id,name])=><Choice key={id} title={name} selected={environment===id} onPress={()=>setEnvironment(id as Environment)}/>)}</Row>
-  {resource.loading?<Loading/>:resource.error?<Notice error>{resource.error}</Notice>:!(resource.data?.exercises.length)?<Empty text="A biblioteca ainda não está disponível no servidor."/>:resource.data.exercises.filter(x=>(!environment||x.environments?.includes(environment))&&x.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(x=><Section key={x.id}><Txt style={{fontWeight:'600'}}>{x.name}</Txt><Txt muted>{x.muscles.join(' · ')} · {x.equipment.length?x.equipment.map(id=>resource.data?.equipment[id]||id).join(', '):'Peso do corpo'}</Txt><Button title="Ver execução e alternativas" variant="quiet" onPress={()=>setSelected(x)}/></Section>)}
+  {resource.loading?<Loading/>:resource.error?<Notice error>{resource.error}</Notice>:!(resource.data?.exercises.length)?<Empty text="Não foi possível carregar a biblioteca deste aparelho. Tente atualizar."/>:resource.data.exercises.filter(x=>(!environment||x.environments?.includes(environment))&&x.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(x=><Section key={x.id}><Txt style={{fontWeight:'600'}}>{x.name}</Txt><Txt muted>{x.muscles.join(' · ')} · {x.equipment.length?x.equipment.map(id=>resource.data?.equipment[id]||id).join(', '):'Peso do corpo'}</Txt><Button title="Ver execução e alternativas" variant="quiet" onPress={()=>setSelected(x)}/></Section>)}
   {selected&&<ExerciseDetails exercise={selected} library={resource.data?.exercises||[]} equipment={resource.data?.equipment} onClose={()=>setSelected(null)}/>}
  </Screen>;
 }
@@ -53,13 +53,13 @@ export function Today({userId,timezone,onPreferences,onActivities}:{userId:strin
  return <Screen title="Hoje" subtitle={plan?.date?new Date(plan.date+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'}):'Um passo de cada vez, no seu ritmo.'} onRefresh={planResource.reload} refreshing={planResource.loading}>
   <Row>{Object.entries(environmentLabels).map(([id,name])=><Choice key={id} title={name} selected={plan?.environment===id} onPress={()=>{if(plan?.status==='started'){void action.run(async()=>{throw new Error('Este treino já começou. O ambiente e a versão da sessão estão preservados no histórico.');});return;}setEnvironment(id as Environment);}}/>)}</Row>
   {recovered.filter(d=>d.planId!==plan?.id).map(d=><Section key={d.planId} title="Sessão salva para retomar"><Txt muted>Iniciada em {new Date(d.startedAt).toLocaleString('pt-BR')}. O intervalo perdido não foi contabilizado.</Txt><Button title="Retomar progresso salvo" variant="quiet" onPress={()=>setSession(d.snapshot!)}/></Section>)}
-  {planResource.error&&plan&&<Notice>Mostrando o treino salvo no aparelho. A conexão com o servidor está indisponível; progresso local terá sincronização pendente.</Notice>}
+  {planResource.error&&plan&&<Notice>Mostrando a última versão salva neste aparelho. Não foi possível atualizar o registro local; tente novamente.</Notice>}
   {planResource.loading&&!plan?<Loading/>:planResource.error&&!plan?<><Notice error>{planResource.error}</Notice><Button title="Revisar preferências" variant="quiet" onPress={onPreferences}/></>:plan&&<>
    <Section><Txt style={{fontSize:23,lineHeight:31,fontWeight:'600'}}>{plan.kind==='rest'?'Hoje pode ser um dia de descanso':plan.focus}</Txt><Txt muted>{plan.reason}</Txt>{plan.durationMinutes&&plan.kind!=='rest'?<Txt>{plan.durationMinutes} minutos · {environmentLabels[plan.environment]}</Txt>:null}</Section>
    {plan.kind==='rest'?<><Txt>Recuperar também faz parte. Se quiser se movimentar, uma atividade leve continua disponível, sem cobrança.</Txt><Button title="Explorar atividades" variant="quiet" onPress={onActivities}/></>:<>
     <Section title="Antes de começar">{plan.warmup.map((x,i)=><Txt key={i}>{x}</Txt>)}<Txt muted>{plan.safetyNote||'Escolha uma execução confortável. Pare se sentir dor ou mal-estar.'}</Txt></Section>
     {plan.exercises.map((x,i)=><Section key={x.id}><Txt style={{fontWeight:'600'}}>{i+1}. {x.name}</Txt><Txt muted>{x.sets} séries · {x.repetitions?x.repetitions+' repetições':x.durationSeconds+' segundos'} · {x.muscles.join(', ')}</Txt><Row><Button title="Como fazer" variant="quiet" onPress={()=>setDetail(library.data?.exercises.find(y=>y.id===x.exerciseId)||x)}/>{plan.status==='draft'&&!!x.substitutionIds.length&&<Button title="Substituir" variant="quiet" onPress={()=>setReplacement(x)}/>}</Row></Section>)}
-    <Notice>Conclusão autodeclarada. Adaptações e versões mais fáceis têm o mesmo valor na constância, conforme o regulamento do desafio.</Notice>
+    <Notice>Conclusão autodeclarada. Adaptações e versões mais fáceis têm o mesmo valor na sua pontuação de constância.</Notice>
     {plan.status==='completed'?<Notice>Treino concluído. Seu histórico foi preservado.</Notice>:<Button title={plan.status==='started'?'Retomar sessão':'Iniciar treino'} busy={action.busy} onPress={plan.status==='started'?()=>setSession(plan):start}/>}
     <Button title="Prefiro cardio ou esporte" variant="quiet" onPress={onActivities}/>
    </>}
@@ -78,10 +78,9 @@ function WorkoutSession({initialPlan,userId,library,onClose}:{initialPlan:DayPla
  useEffect(()=>{if(!draft)return;const timeout=setTimeout(()=>{void saveDraft(draft).catch(()=>setState('Falha ao salvar no aparelho. Mantenha a sessão aberta.'));},200);return()=>clearTimeout(timeout);},[draft]);
  function leave(){if(draft?.pendingFinish){onClose();return;}confirmAction('Sair da sessão?','Seu progresso ficará salvo no aparelho. A contagem de tempo para enquanto a tela não estiver ativa.',onClose);}
  useEffect(()=>{const event=BackHandler.addEventListener('hardwareBackPress',()=>{leave();return true;});return()=>event.remove();},[draft]);
- async function sync(){if(!draft)return;await saveDraft(draft);await action.run(async()=>{const updated=await api<DayPlan>('/plans/'+plan.id+'/progress',{method:'PATCH',body:{sets:draft.sets,adaptations:draft.adaptations,notes:draft.notes}});setPlan(updated);setState('Confirmado no servidor');});}
+ async function sync(){if(!draft)return;await action.run(async()=>{await saveDraft(draft);const updated=await api<DayPlan>('/plans/'+plan.id+'/progress',{method:'PATCH',body:{sets:draft.sets,adaptations:draft.adaptations,notes:draft.notes}});setPlan(updated);setState('Progresso salvo neste aparelho');});}
  async function finish(){if(!draft)return;confirmAction('Concluir treino?','Você declara que concluiu a sessão adaptada. Cronômetro e sensores não comprovam exercícios de força.',async()=>{
-  const finished={...draft,pendingFinish:true,finishedAt:new Date().toISOString()};setDraft(finished);await saveDraft(finished);setState('Sincronização pendente');
-  await action.run(async()=>{await syncTrainingDrafts(userId,draft.planId);setState('Confirmado no servidor');onClose();});
+  await action.run(async()=>{const finished={...draft,pendingFinish:true,finishedAt:new Date().toISOString()};await saveDraft(finished);setDraft(finished);setTimerOn(false);setState('Registrando conclusão neste aparelho…');await syncTrainingDrafts(userId,draft.planId);setState('Conclusão salva neste aparelho');onClose();});
  });}
  function adapt(slot:string,update:Record<string,unknown>){setDraft(d=>d?{...d,adaptations:{...d.adaptations,[slot]:{...d.adaptations[slot],...update}}}:d);}
  if(!draft)return <Screen title="Preparando sessão"><Loading/></Screen>;
@@ -98,9 +97,9 @@ function WorkoutSession({initialPlan,userId,library,onClose}:{initialPlan:DayPla
   })}
   <Field label="Observações da sessão" multiline value={draft.notes} onChangeText={notes=>setDraft(d=>d?{...d,notes}:d)} editable={!draft.pendingFinish}/>
   {plan.cooldown?.length?<Section title="Ao terminar">{plan.cooldown.map((x,i)=><Txt key={i}>{x}</Txt>)}</Section>:null}
-  <Notice>Reduzir séries e adaptar não diminui o valor de uma conclusão elegível de constância. As regras do grupo definem a elegibilidade.</Notice>
-  {action.error&&<Notice error>{action.error} Seu progresso permanece no aparelho. A sincronização será tentada quando houver conexão.</Notice>}
-  {draft.pendingFinish?<Button title="Tentar sincronizar" busy={action.busy} onPress={()=>action.run(async()=>{await syncTrainingDrafts(userId);onClose();})}/>:<><Button title="Salvar progresso no servidor" variant="quiet" onPress={sync} busy={action.busy}/><Button title="Concluir sessão adaptada" onPress={finish} busy={action.busy}/></>}
+  <Notice>Reduzir séries ou usar uma versão mais fácil mantém o mesmo valor da conclusão na sua constância. Várias sessões no mesmo dia não geram pontos extras.</Notice>
+  {action.error&&<Notice error>{action.error} Não foi possível atualizar o registro local. O progresso já salvo permanece neste aparelho. Tente salvar novamente; esta função não precisa de internet.</Notice>}
+  {draft.pendingFinish?<Button title="Tentar registrar conclusão" busy={action.busy} onPress={()=>action.run(async()=>{await syncTrainingDrafts(userId);onClose();})}/>:<><Button title="Salvar progresso neste aparelho" variant="quiet" onPress={sync} busy={action.busy}/><Button title="Concluir sessão adaptada" onPress={finish} busy={action.busy}/></>}
   {detail&&<ExerciseDetails exercise={detail} library={library} onClose={()=>setDetail(null)}/>}
  </Screen>;
 }

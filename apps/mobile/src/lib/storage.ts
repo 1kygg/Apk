@@ -18,6 +18,7 @@ export async function database() {
     await db.execAsync(`
       PRAGMA journal_mode = WAL;
       PRAGMA foreign_keys = ON;
+      PRAGMA busy_timeout = 5000;
       CREATE TABLE IF NOT EXISTS local_activities (
         client_id TEXT PRIMARY KEY,
         owner_id TEXT NOT NULL,
@@ -53,10 +54,17 @@ export async function database() {
   })();
   return opening;
 }
-export async function putActivity(activity: StoredActivity) {
-  const db = await database();
-  await db.runAsync('INSERT INTO local_activities(client_id,owner_id,data,updated_at) VALUES(?,?,?,?) ON CONFLICT(client_id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at', activity.clientId, activity.ownerId, JSON.stringify(activity), Date.now());
+// All writes share one queue, including the device service's exclusive transactions.
+// Internal transaction code uses the supplied connection, never re-enters this queue.
+let writeQueue:Promise<unknown>=Promise.resolve();
+export function withLocalDatabaseWrite<T>(action:(db:SQLite.SQLiteDatabase)=>Promise<T>):Promise<T>{
+  const task=writeQueue.then(async()=>action(await database()));
+  writeQueue=task.then(()=>undefined,()=>undefined);return task;
 }
+async function putActivityOn(db:SQLite.SQLiteDatabase,activity:StoredActivity){
+  await db.runAsync('INSERT INTO local_activities(client_id,owner_id,data,updated_at) VALUES(?,?,?,?) ON CONFLICT(client_id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at',activity.clientId,activity.ownerId,JSON.stringify(activity),Date.now());
+}
+export function putActivity(activity:StoredActivity){return withLocalDatabaseWrite(db=>putActivityOn(db,activity));}
 export async function readActivity(id: string, ownerId?: string): Promise<StoredActivity | null> {
   const db = await database();
   const row = ownerId
@@ -69,64 +77,51 @@ export async function readActivities(ownerId: string): Promise<StoredActivity[]>
   const rows = await db.getAllAsync<{data:string}>('SELECT data FROM local_activities WHERE owner_id=? ORDER BY updated_at DESC', ownerId);
   return rows.map(row => JSON.parse(row.data) as StoredActivity);
 }
-export async function appendPoint(id: string, p: RoutePoint) {
-  const db = await database();
-  await db.runAsync('INSERT OR IGNORE INTO route_points(client_id,segment,timestamp,latitude,longitude,accuracy) VALUES(?,?,?,?,?,?)', id, p.segment, p.timestamp, p.latitude, p.longitude, p.accuracy);
+export function appendPoint(id:string,p:RoutePoint){
+  return withLocalDatabaseWrite(async db=>{await db.runAsync('INSERT OR IGNORE INTO route_points(client_id,segment,timestamp,latitude,longitude,accuracy) VALUES(?,?,?,?,?,?)',id,p.segment,p.timestamp,p.latitude,p.longitude,p.accuracy);});
 }
 export async function readRoute(id: string, ownerId: string): Promise<RoutePoint[]> {
   const db = await database();
   return db.getAllAsync<RoutePoint>('SELECT latitude,longitude,accuracy,timestamp,segment FROM route_points WHERE client_id=? AND EXISTS(SELECT 1 FROM local_activities a WHERE a.client_id=? AND a.owner_id=?) ORDER BY timestamp,id', id,id,ownerId);
 }
-export async function setActiveId(id: string | null, ownerId: string) {
-  const db = await database();
-  if (id) await db.runAsync("INSERT INTO local_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", "active."+ownerId,id);
-  else await db.runAsync("DELETE FROM local_meta WHERE key=?", "active."+ownerId);
-}
+export function setActiveId(id:string|null,ownerId:string){return withLocalDatabaseWrite(async db=>{
+  if(id)await db.runAsync('INSERT INTO local_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value','active.'+ownerId,id);
+  else await db.runAsync('DELETE FROM local_meta WHERE key=?','active.'+ownerId);
+});}
 export async function getActiveId(ownerId: string): Promise<string | null> {
   const row = await (await database()).getFirstAsync<{value:string}>("SELECT value FROM local_meta WHERE key=?", "active."+ownerId);
   return row?.value ?? null;
 }
-export async function enqueue(activity: StoredActivity) {
-  const db = await database();
-  await db.withTransactionAsync(async () => {
-    await putActivity(activity);
+export function enqueue(activity:StoredActivity){return withLocalDatabaseWrite(async db=>{
+  await db.withTransactionAsync(async()=>{
+    await putActivityOn(db,activity);
     await db.runAsync('INSERT OR IGNORE INTO outbox(client_id,owner_id) VALUES(?,?)',activity.clientId,activity.ownerId);
   });
-}
+});}
 export async function queued(ownerId: string): Promise<string[]> {
   const rows = await (await database()).getAllAsync<{client_id:string}>('SELECT client_id FROM outbox WHERE owner_id=? ORDER BY rowid', ownerId);
   return rows.map(r => r.client_id);
 }
-export async function acknowledge(activity: StoredActivity,assertCurrent:()=>void=()=>{}) {
-  const db = await database();
-  await db.withTransactionAsync(async () => {
-    assertCurrent();
-    await putActivity(activity);assertCurrent();
-    await db.runAsync('DELETE FROM outbox WHERE client_id=? AND owner_id=?', activity.clientId,activity.ownerId);assertCurrent();
+export function acknowledge(activity:StoredActivity,assertCurrent:()=>void=()=>{}){return withLocalDatabaseWrite(async db=>{
+  await db.withTransactionAsync(async()=>{
+    assertCurrent();await putActivityOn(db,activity);assertCurrent();
+    await db.runAsync('DELETE FROM outbox WHERE client_id=? AND owner_id=?',activity.clientId,activity.ownerId);assertCurrent();
   });
-}
-export async function markAttempt(id: string, code: string) {
-  await (await database()).runAsync('UPDATE outbox SET attempts=attempts+1,last_error=? WHERE client_id=?', code,id);
-}
-export async function removeActivity(id: string, ownerId: string) {
-  await (await database()).runAsync('DELETE FROM local_activities WHERE client_id=? AND owner_id=?',id,ownerId);
-}
-export async function deleteOwnerData(ownerId: string) {
-  const db = await database();
-  await db.withTransactionAsync(async () => {
-    await db.runAsync('DELETE FROM local_activities WHERE owner_id=?', ownerId);
+});}
+export function markAttempt(id:string,code:string){return withLocalDatabaseWrite(async db=>{await db.runAsync('UPDATE outbox SET attempts=attempts+1,last_error=? WHERE client_id=?',code,id);});}
+export function removeActivity(id:string,ownerId:string){return withLocalDatabaseWrite(async db=>{await db.runAsync('DELETE FROM local_activities WHERE client_id=? AND owner_id=?',id,ownerId);});}
+export function deleteOwnerData(ownerId:string){return withLocalDatabaseWrite(async db=>{
+  await db.withTransactionAsync(async()=>{
+    await db.runAsync('DELETE FROM local_activities WHERE owner_id=?',ownerId);
     await db.runAsync('DELETE FROM local_meta WHERE key=?','active.'+ownerId);
-    await db.runAsync("DELETE FROM local_meta WHERE key LIKE ?", 'reminders.'+ownerId+'%');
+    await db.runAsync('DELETE FROM local_meta WHERE key=?','local-score-rules.'+ownerId);
+    await db.runAsync('DELETE FROM local_meta WHERE key LIKE ?','reminders.'+ownerId+'%');
   });
-}
-export async function setLocalPreference(key: string, value: unknown) {
-  await (await database()).runAsync('INSERT INTO local_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',key,JSON.stringify(value));
-}
+});}
+export function setLocalPreference(key:string,value:unknown){return withLocalDatabaseWrite(async db=>{await db.runAsync('INSERT INTO local_meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',key,JSON.stringify(value));});}
 export async function getLocalPreference<T>(key: string): Promise<T | null> {
   const row=await (await database()).getFirstAsync<{value:string}>('SELECT value FROM local_meta WHERE key=?',key);
   return row ? JSON.parse(row.value) as T : null;
 }
 
-export async function deleteRoute(id:string){
-  await (await database()).runAsync('DELETE FROM route_points WHERE client_id=?',id);
-}
+export function deleteRoute(id:string){return withLocalDatabaseWrite(async db=>{await db.runAsync('DELETE FROM route_points WHERE client_id=?',id);});}

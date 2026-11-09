@@ -13,9 +13,9 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      SOURCE_RUN: '42487145111'
-      SOURCE_SHA: '893bed757c766e99182f25b1edb316fc4f460285'
-      RELEASE_TAG: consta-android-893bed7
+      SOURCE_RUN: '42604239761'
+      SOURCE_SHA: '746bd0d6bf0689dade880eb6ba54c7164616526f'
+      RELEASE_TAG: consta-offline-v1.1.0-746bd0d
     steps:
       - name: Confirmar build e revisão de origem
         shell: bash
@@ -25,7 +25,7 @@ jobs:
       - name: Baixar e verificar o APK já compilado
         shell: bash
         run: |
-          gh run download "$SOURCE_RUN" --name consta-android-internal-9 --dir release
+          gh run download "$SOURCE_RUN" --name consta-offline-android-11 --dir release
           (cd release && sha256sum -c SHA256SUMS.txt)
           sdk_dir="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           apk_signer="$(find "$sdk_dir/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
@@ -43,6 +43,7 @@ jobs:
             assert not any(n.startswith(('lib/x86/','lib/x86_64/','lib/armeabi-v7a/')) for n in names)
           package=open('release/apk-package.txt').read()
           assert "name='app.consta.mobile'" in package
+          assert "versionName='1.1.0'" in package and "versionCode='2'" in package
           assert "sdkVersion:'26'" in package
           assert "targetSdkVersion:'36'" in package
           assert not re.search(r"uses-permission: name='android.permission.(CAMERA|RECORD_AUDIO|READ_CONTACTS|ACCESS_BACKGROUND_LOCATION)'",package)
@@ -52,14 +53,17 @@ jobs:
         shell: bash
         run: |
           cat > release-notes.md <<'NOTES'
-          Aplicativo nativo Consta para Android arm64, Android 8.0 ou superior. Build release com assinatura de desenvolvimento, destinado a teste interno.
+          Consta 1.1.0 local para Android arm64, Android 8.0 ou superior. Abra o APK, informe nome/apelido e foto opcional. Não precisa de login, servidor, OAuth ou internet para perfil, treinos, registros e pontuação pessoal.
 
-          **Configuração necessária:** sem URL HTTPS da API e IDs OAuth reais, a entrada informa configuração pendente. Não há login de demonstração. As instruções completas estão em README.md e docs/SETUP.md da revisão de origem.
+          O GPS depende de localização e sinal do aparelho. O traçado dos pontos é desenhado offline, sem mapa de ruas. Compartilhar por outro aplicativo pode exigir a conexão daquele aplicativo. Não há ranking sincronizado entre celulares nem recuperação na nuvem.
 
-          Verificação: TypeScript, 138 testes automatizados, PostgreSQL real, SQL/rollback SQLite por adaptador Node, build e smoke HTTP da API e compilação Android. APK conferido com checksum SHA256, apksigner e aapt. Isso não comprova instalação, OAuth, sensores, tela bloqueada, acessibilidade ou desempenho em aparelho; essas verificações continuam pendentes.
+          Verificado: TypeScript e 177 testes no CI, incluindo perfil/SQLite/pontos/cardio com adaptadores, compilação Android, checksum e assinatura. Teste de interface em emulador está em execução separada; não está declarado aprovado nesta release inicial. Sensores, fotos/permissões físicas, tela bloqueada, iOS, acessibilidade e desempenho em aparelho continuam sem verificação física.
 
-          Baixe consta-internal.apk e abra no Android. SHA256SUMS.txt contém o checksum; os demais arquivos registram certificado público, pacote e verificação. Nenhuma chave privada é publicada. A versão iOS exige Mac/Xcode e configuração própria. Não há importação Health Connect/HealthKit; passos usam pedômetro nativo opcional.
+          Baixe consta-offline.apk e abra no celular para instalar. Assinatura de desenvolvimento para teste interno, sem publicação em loja. Nenhuma chave privada ou conta de demonstração é publicada. Foto e registros ficam neste aparelho; apagar dados/desinstalar pode remover o histórico. Horários são os do aparelho e conclusões são autodeclaradas.
 
-          Código: 893bed757c766e99182f25b1edb316fc4f460285. Nenhum serviço pago foi ativado.
+          Código: 746bd0d6bf0689dade880eb6ba54c7164616526f. Instruções em README.md e docs/SETUP.md. Nenhum serviço pago foi ativado.
           NOTES
-          gh release create "$RELEASE_TAG" release/consta-internal.apk release/SHA256SUMS.txt release/signing-certificate.txt release/INSTALL.txt release/apk-verification.txt release/apk-package.txt --target "$SOURCE_SHA" --title 'Consta — Android para teste interno' --notes-file release-notes.md --prerelease
+          mv release/consta-internal.apk release/consta-offline.apk
+          sed -i 's/consta-internal.apk/consta-offline.apk/' release/SHA256SUMS.txt
+          (cd release && sha256sum -c SHA256SUMS.txt)
+          gh release create "$RELEASE_TAG" release/consta-offline.apk release/SHA256SUMS.txt release/signing-certificate.txt release/INSTALL.txt release/apk-verification.txt release/apk-package.txt --target "$SOURCE_SHA" --title 'Consta Offline 1.1.0 — perfil e pontos sem login' --notes-file release-notes.md --prerelease

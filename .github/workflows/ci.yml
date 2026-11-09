@@ -1,0 +1,160 @@
+name: Consta — validar e gerar Android
+
+on:
+  push:
+    branches: [codex/consta-native]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: consta-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lockfile:
+    name: Registrar lockfile inicial da branch autorizada
+    if: github.event_name == 'push' && github.ref == 'refs/heads/codex/consta-native'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      source-sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Gerar e registrar somente lockfile ausente
+        env:
+          TARGET_BRANCH: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only --ignore-scripts
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -- package-lock.json
+            git commit -m "build: lock npm dependencies"
+            git push origin "HEAD:$TARGET_BRANCH"
+          fi
+          # Push com GITHUB_TOKEN não dispara novamente este workflow.
+      - name: Registrar revisão
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: TypeScript, unidades e PostgreSQL real
+    needs: lockfile
+    if: always() && !cancelled() && (needs.lockfile.result == 'success' || needs.lockfile.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      source-sha: ${{ steps.source.outputs.sha }}
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: consta_test
+          POSTGRES_PASSWORD: test_fixture_only
+          POSTGRES_DB: consta_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U consta_test -d consta_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      CI: 'true'
+      DATABASE_URL: postgresql://consta_test:test_fixture_only@localhost:5432/consta_test
+      TEST_DATABASE_URL: postgresql://consta_test:test_fixture_only@localhost:5432/consta_test
+      JWT_SECRET: ci-test-only-not-a-production-secret-at-least-32-bytes
+      RUN_DB_TESTS: '1'
+      GOOGLE_CLIENT_IDS: ''
+      APPLE_CLIENT_IDS: ''
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.lockfile.outputs.source-sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Preparar lockfile em PR ou execução manual sem lock registrado
+        shell: bash
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only --ignore-scripts
+          fi
+      - name: Registrar revisão efetivamente verificada
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run api:migrate
+      - run: npm test
+      - run: npm run api:build
+      - run: npm run api:smoke
+      - name: Resumo de validação
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Consta"
+            echo "Revisão: $(git rev-parse HEAD)"
+            echo "Consulte o status de cada etapa para o resultado real."
+            echo "PostgreSQL 16 foi disponibilizado aos testes de integração."
+            echo "OAuth externo, sensores, tela bloqueada e desempenho físico não são validados por este job."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  android:
+    if: github.event_name != 'pull_request'
+    name: APK Android nativo para teste interno
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+      EXPO_NO_TELEMETRY: '1'
+      ANDROID_ABIS: arm64-v8a
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.quality.outputs.source-sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Preparar lockfile em PR ou execução manual sem lock registrado
+        shell: bash
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only --ignore-scripts
+          fi
+      - run: npm ci
+      - name: Compilar release Android nativo
+        run: npm run android:apk
+      - name: Guardar APK, checksum e certificado público
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: consta-offline-android-${{ github.run_number }}
+          path: artifacts/android/
+          if-no-files-found: error
+          retention-days: 1
+      - name: Resumo do APK
+        shell: bash
+        run: |
+          {
+            echo "## APK nativo para teste interno"
+            echo "Arquitetura: arm64-v8a; build release; assinatura de desenvolvimento."
+            echo "O artifact inclui SHA256 e impressão pública do certificado, nunca a chave privada."
+            echo "Perfil local, treinos, histórico e pontos funcionam sem servidor, OAuth ou internet."
+            echo "Este build não comprova GPS, OAuth ou 60 FPS em aparelho real."
+          } >> "$GITHUB_STEP_SUMMARY"
